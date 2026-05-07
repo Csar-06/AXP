@@ -14,6 +14,7 @@ type Props = {
   track: Track;
   onPress: (track: Track) => void;
   showArtwork?: boolean;
+  showTrackNum?: boolean;
   isActive?: boolean;
   rightElement?: React.ReactNode;
 };
@@ -22,6 +23,7 @@ export const TrackRow = React.memo(function TrackRow({
   track,
   onPress,
   showArtwork = true,
+  showTrackNum = false,
   isActive = false,
   rightElement,
 }: Props) {
@@ -32,7 +34,12 @@ export const TrackRow = React.memo(function TrackRow({
       style={({ pressed }) => [styles.container, pressed && styles.pressed]}
       onPress={handlePress}
     >
-      {showArtwork && (
+      {showTrackNum && (
+        <Text style={[styles.trackNum, isActive && styles.trackNumActive]}>
+          {track.trackNum ?? '–'}
+        </Text>
+      )}
+      {showArtwork && !showTrackNum && (
         <ArtworkImage uri={track.artworkUri} size={44} style={styles.artwork} />
       )}
       <View style={styles.info}>
@@ -116,5 +123,15 @@ const styles = StyleSheet.create({
   duration: {
     fontSize: Typography.sm,
     color: Colors.textTertiary,
+  },
+  trackNum: {
+    width: 28,
+    fontSize: Typography.base,
+    color: Colors.textSecondary,
+    textAlign: 'right',
+    flexShrink: 0,
+  },
+  trackNumActive: {
+    color: Colors.accent,
   },
 });

@@ -58,7 +58,11 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       ordered = shuffleTracks(tracks);
       index = 0;
     }
-    set({ queue: ordered, currentTrack: ordered[index] ?? null });
+    set({
+      queue: ordered,
+      currentTrack: ordered[index] ?? null,
+      isPlayerVisible: true,
+    });
     await loadAndPlay(ordered, index);
   },
 

@@ -12,6 +12,10 @@ export type Track = {
   year: number | null;
   trackNum: number | null;
   discNum: number | null;
+  totalTracks: number | null;
+  totalDiscs: number | null;
+  composer: string | null;
+  lyrics: string | null;
   duration: number;
   fileSize: number;
   format: string;
@@ -187,10 +191,30 @@ type RawMeta = {
   genre?: string;
   year?: number | string | null;
   track?: number | string | null;
+  totalTracks?: number | null;
   disc?: number | string | null;
+  totalDiscs?: number | null;
+  composer?: string | null;
+  lyrics?: string | null;
   duration?: number;
   picture?: string | null;
 };
+
+function bytesToBase64(bytes: number[]): string {
+  const chunkSize = 8192;
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.slice(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
+function parseSlashNum(raw: string | undefined, idx: 0 | 1): number | null {
+  if (!raw) return null;
+  const part = raw.split('/')[idx];
+  const n = parseInt(part ?? '', 10);
+  return isNaN(n) ? null : n;
+}
 
 async function readMetadata(uri: string): Promise<RawMeta> {
   // jsmediatags doesn't support content:// SAF URIs — skip on those, the
@@ -204,7 +228,32 @@ async function readMetadata(uri: string): Promise<RawMeta> {
       jsmediatags.read(uri, {
         onSuccess(tag: { tags: Record<string, unknown> }) {
           const t = tag.tags;
+
+          // TRCK "5/12" → track number + total tracks
+          const trackRaw = t.track as string | undefined;
+          const track = parseSlashNum(trackRaw, 0);
+          const totalTracks = parseSlashNum(trackRaw, 1);
+
+          // TPOS "1/2" → disc number + total discs
+          const tposRaw =
+            (t.TPOS as { description?: string } | undefined)?.description ??
+            (t.TPOS as string | undefined);
+          const disc = parseSlashNum(tposRaw, 0);
+          const totalDiscs = parseSlashNum(tposRaw, 1);
+
+          // TCOM — composer
+          const composer =
+            (t.TCOM as { description?: string } | undefined)?.description ??
+            (t.composer as string | undefined) ??
+            null;
+
+          // USLT — unsynchronized lyrics
+          const uslt = t.USLT as { text?: string } | undefined;
+          const lyrics = uslt?.text ?? null;
+
+          // Embedded artwork (chunked to avoid call-stack overflow on large covers)
           const picture = (t.picture as { data?: number[] } | undefined)?.data;
+
           resolve({
             title: (t.title as string | undefined) ?? undefined,
             artist: (t.artist as string | undefined) ?? undefined,
@@ -214,11 +263,14 @@ async function readMetadata(uri: string): Promise<RawMeta> {
               undefined,
             genre: (t.genre as string | undefined) ?? undefined,
             year: t.year as number | undefined,
-            track: (t.track as string | undefined)
-              ? parseInt(t.track as string, 10)
-              : undefined,
+            track,
+            totalTracks,
+            disc,
+            totalDiscs,
+            composer,
+            lyrics,
             picture: picture
-              ? `data:image/jpeg;base64,${btoa(String.fromCharCode(...picture))}`
+              ? `data:image/jpeg;base64,${bytesToBase64(picture)}`
               : null,
           });
         },
@@ -312,19 +364,24 @@ export async function scanLibrary(
     await db.runAsync(
       `INSERT INTO tracks (
         id, uri, title, artist, album, album_artist, genre, year,
-        track_num, disc_num, duration, file_size, format, is_lossless,
+        track_num, disc_num, total_tracks, total_discs, composer, lyrics,
+        duration, file_size, format, is_lossless,
         artwork_uri, date_added, date_modified
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,strftime('%s','now'),?)
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,strftime('%s','now'),?)
       ON CONFLICT(uri) DO UPDATE SET
         title=excluded.title, artist=excluded.artist, album=excluded.album,
         album_artist=excluded.album_artist, genre=excluded.genre, year=excluded.year,
         track_num=excluded.track_num, disc_num=excluded.disc_num,
+        total_tracks=excluded.total_tracks, total_discs=excluded.total_discs,
+        composer=excluded.composer, lyrics=excluded.lyrics,
         duration=excluded.duration, file_size=excluded.file_size,
         format=excluded.format, is_lossless=excluded.is_lossless,
         artwork_uri=excluded.artwork_uri, date_modified=excluded.date_modified`,
       [
         id, uri, title, artist, album, albumArtist, genre, year,
-        trackNum, discNum, meta.duration ?? 0, size, ext, lossless,
+        trackNum, discNum, meta.totalTracks ?? null, meta.totalDiscs ?? null,
+        meta.composer ?? null, meta.lyrics ?? null,
+        meta.duration ?? 0, size, ext, lossless,
         meta.picture ?? null, Math.floor(mtime),
       ],
     );
@@ -411,6 +468,10 @@ function rowToTrack(r: Record<string, unknown>): Track {
     year: r.year as number | null,
     trackNum: r.track_num as number | null,
     discNum: r.disc_num as number | null,
+    totalTracks: r.total_tracks as number | null,
+    totalDiscs: r.total_discs as number | null,
+    composer: r.composer as string | null,
+    lyrics: r.lyrics as string | null,
     duration: r.duration as number,
     fileSize: r.file_size as number,
     format: r.format as string,

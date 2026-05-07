@@ -1,13 +1,16 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
   Pressable,
   StyleSheet,
   StatusBar,
+  ScrollView,
+  Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { ArtworkImage } from '@/components/ArtworkImage';
 import { ProgressBar } from '@/components/ProgressBar';
@@ -38,6 +41,8 @@ export function FullPlayerScreen({ navigation }: Props) {
   const toggleShuffle = usePlayerStore((s) => s.toggleShuffle);
   const cycleRepeat = usePlayerStore((s) => s.cycleRepeat);
 
+  const [lyricsVisible, setLyricsVisible] = useState(false);
+
   const repeatIcon =
     repeatMode === RepeatMode.Off
       ? '↻'
@@ -50,9 +55,43 @@ export function FullPlayerScreen({ navigation }: Props) {
     navigation.navigate('QueueView');
   }, [navigation]);
 
+  const handleClose = useCallback(() => {
+    navigation.goBack();
+  }, [navigation]);
+
+  const handleLyricsOpen  = useCallback(() => setLyricsVisible(true),  []);
+  const handleLyricsClose = useCallback(() => setLyricsVisible(false), []);
+
+  // Reset the "open player" flag when the screen leaves so future plays
+  // can re-trigger navigation to this screen.
+  useEffect(() => {
+    return () => {
+      usePlayerStore.getState().setPlayerVisible(false);
+    };
+  }, []);
+
+  // Swipe-down to dismiss. Activates only on a clear downward drag, so it
+  // doesn't fight the seek slider or other vertical interactions.
+  const dismissGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .activeOffsetY(15)
+        .failOffsetY(-15)
+        .runOnJS(true)
+        .onEnd((event) => {
+          if (event.translationY > 80 || event.velocityY > 600) {
+            handleClose();
+          }
+        }),
+    [handleClose],
+  );
+
   if (!currentTrack) return null;
 
+  const hasLyrics = Boolean(currentTrack.lyrics?.trim());
+
   return (
+    <GestureDetector gesture={dismissGesture}>
     <LinearGradient
       colors={[playerBg, playerBgSecondary, '#000000']}
       locations={[0, 0.5, 1]}
@@ -62,7 +101,7 @@ export function FullPlayerScreen({ navigation }: Props) {
 
       {/* Header */}
       <View style={styles.header}>
-        <Pressable onPress={() => navigation.goBack()} hitSlop={12}>
+        <Pressable onPress={handleClose} hitSlop={12}>
           <Text style={styles.headerChevron}>⌄</Text>
         </Pressable>
         <Text style={styles.headerTitle}>Reproduciendo</Text>
@@ -90,6 +129,11 @@ export function FullPlayerScreen({ navigation }: Props) {
           <Text style={styles.trackArtist} numberOfLines={1}>
             {currentTrack.artist}
           </Text>
+          {currentTrack.composer ? (
+            <Text style={styles.trackComposer} numberOfLines={1}>
+              {currentTrack.composer}
+            </Text>
+          ) : null}
         </View>
         <Pressable hitSlop={10}>
           <Text style={styles.starIcon}>☆</Text>
@@ -143,13 +187,65 @@ export function FullPlayerScreen({ navigation }: Props) {
             {repeatIcon}
           </Text>
         </Pressable>
+        <Pressable
+          onPress={hasLyrics ? handleLyricsOpen : undefined}
+          hitSlop={10}
+        >
+          <Text
+            style={[
+              styles.secondaryIcon,
+              hasLyrics ? styles.secondaryIconAvailable : styles.secondaryIconDisabled,
+            ]}
+          >
+            ♪
+          </Text>
+        </Pressable>
         <Pressable onPress={handleQueuePress} hitSlop={10}>
           <Text style={styles.secondaryIcon}>☰</Text>
         </Pressable>
       </View>
 
       <View style={{ paddingBottom: insets.bottom + Spacing.md }} />
+
+      {/* Lyrics overlay */}
+      <Modal
+        visible={lyricsVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={handleLyricsClose}
+      >
+        <LinearGradient
+          colors={[playerBg, playerBgSecondary, '#000000']}
+          locations={[0, 0.4, 1]}
+          style={[styles.lyricsModal, { paddingTop: insets.top }]}
+        >
+          <View style={styles.lyricsHeader}>
+            <View style={styles.lyricsHeaderInfo}>
+              <Text style={styles.lyricsSong} numberOfLines={1}>
+                {currentTrack.title}
+              </Text>
+              <Text style={styles.lyricsArtist} numberOfLines={1}>
+                {currentTrack.artist}
+              </Text>
+            </View>
+            <Pressable onPress={handleLyricsClose} hitSlop={12}>
+              <Text style={styles.lyricsClose}>✕</Text>
+            </Pressable>
+          </View>
+          <ScrollView
+            style={styles.lyricsScroll}
+            contentContainerStyle={[
+              styles.lyricsContent,
+              { paddingBottom: insets.bottom + Spacing.xxxl },
+            ]}
+            showsVerticalScrollIndicator={false}
+          >
+            <Text style={styles.lyricsText}>{currentTrack.lyrics}</Text>
+          </ScrollView>
+        </LinearGradient>
+      </Modal>
     </LinearGradient>
+    </GestureDetector>
   );
 }
 
@@ -201,7 +297,7 @@ const styles = StyleSheet.create({
   },
   infoText: {
     flex: 1,
-    gap: 4,
+    gap: 2,
   },
   trackTitle: {
     fontSize: Typography.xl,
@@ -211,6 +307,10 @@ const styles = StyleSheet.create({
   trackArtist: {
     fontSize: Typography.base,
     color: Colors.textSecondary,
+  },
+  trackComposer: {
+    fontSize: Typography.sm,
+    color: Colors.textTertiary,
   },
   starIcon: {
     fontSize: 24,
@@ -251,5 +351,54 @@ const styles = StyleSheet.create({
   },
   secondaryIconActive: {
     color: Colors.accent,
+  },
+  secondaryIconAvailable: {
+    color: Colors.controlInactive,
+  },
+  secondaryIconDisabled: {
+    color: Colors.textTertiary,
+    opacity: 0.4,
+  },
+
+  // Lyrics modal
+  lyricsModal: {
+    flex: 1,
+  },
+  lyricsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.base,
+    paddingVertical: Spacing.lg,
+    gap: Spacing.md,
+  },
+  lyricsHeaderInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  lyricsSong: {
+    fontSize: Typography.base,
+    fontWeight: Typography.semibold,
+    color: Colors.textPrimary,
+  },
+  lyricsArtist: {
+    fontSize: Typography.sm,
+    color: Colors.textSecondary,
+  },
+  lyricsClose: {
+    fontSize: 18,
+    color: Colors.textSecondary,
+    padding: Spacing.xs,
+  },
+  lyricsScroll: {
+    flex: 1,
+  },
+  lyricsContent: {
+    paddingHorizontal: Spacing.base,
+    paddingTop: Spacing.md,
+  },
+  lyricsText: {
+    fontSize: Typography.base,
+    lineHeight: 28,
+    color: Colors.textPrimary,
   },
 });

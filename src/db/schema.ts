@@ -9,6 +9,26 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
   return db;
 }
 
+async function runMigrations(database: SQLite.SQLiteDatabase): Promise<void> {
+  const newColumns: Array<{ col: string; def: string }> = [
+    { col: 'composer',     def: 'ALTER TABLE tracks ADD COLUMN composer     TEXT' },
+    { col: 'lyrics',       def: 'ALTER TABLE tracks ADD COLUMN lyrics       TEXT' },
+    { col: 'total_tracks', def: 'ALTER TABLE tracks ADD COLUMN total_tracks INTEGER' },
+    { col: 'total_discs',  def: 'ALTER TABLE tracks ADD COLUMN total_discs  INTEGER' },
+  ];
+
+  const cols = await database.getAllAsync<{ name: string }>(
+    "PRAGMA table_info(tracks)",
+  );
+  const existing = new Set(cols.map((c) => c.name));
+
+  for (const { col, def } of newColumns) {
+    if (!existing.has(col)) {
+      await database.execAsync(def);
+    }
+  }
+}
+
 export async function initDb(): Promise<void> {
   const database = await getDb();
 
@@ -114,4 +134,6 @@ export async function initDb(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_tracks_genre   ON tracks(genre);
     CREATE INDEX IF NOT EXISTS idx_tracks_added   ON tracks(date_added DESC);
   `);
+
+  await runMigrations(database);
 }
