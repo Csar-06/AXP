@@ -1,0 +1,12 @@
+{
+  "name": "expo-audio-metadata",
+  "version": "1.0.0",
+  "description": "Expo local module — reads audio file metadata using native platform APIs",
+  "main": "src/index.ts",
+  "files": [
+    "src",
+    "android",
+    "ios",
+    "expo-module.config.json"
+  ]
+}
