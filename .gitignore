@@ -9,7 +9,12 @@ dist/
 web-build/
 expo-env.d.ts
 
-# Native
+# Native — Android Gradle outputs
+**/android/build/
+**/android/.gradle/
+android/app/build/
+android/build/
+
 *.orig.*
 *.jks
 *.p8

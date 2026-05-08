@@ -1,4 +1,5 @@
 import * as FileSystem from 'expo-file-system/legacy';
+import { readAudioMetadata } from 'expo-audio-metadata';
 import { getDb } from './schema';
 
 export type Track = {
@@ -82,6 +83,71 @@ function slugify(text: string): string {
 
 function makeId(...parts: string[]): string {
   return parts.map(slugify).join('::');
+}
+
+// ── Artwork persistence ────────────────────────────────────────────────────────
+// Embedded cover art comes from the native module as a base64 `data:` URI.
+// Storing those strings directly in SQLite blew the JS heap on boot (loadAll
+// with SELECT * materialised every blob into memory). Instead, we write the
+// decoded bytes to a cache file once during scan and store only its URI.
+
+const ARTWORK_DIR = `${FileSystem.cacheDirectory ?? ''}artwork`;
+let artworkDirReady = false;
+
+async function ensureArtworkDir(): Promise<void> {
+  if (artworkDirReady) return;
+  try {
+    const info = await FileSystem.getInfoAsync(ARTWORK_DIR);
+    if (!info.exists) {
+      await FileSystem.makeDirectoryAsync(ARTWORK_DIR, { intermediates: true });
+    }
+    artworkDirReady = true;
+  } catch {
+    // Cache may be unavailable in some environments — fall back to no-op
+    // persistence; the column simply stays null.
+  }
+}
+
+function safeArtworkBasename(trackId: string): string {
+  return trackId.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 120);
+}
+
+function extFromMime(mime: string): string {
+  if (mime.includes('png'))  return 'png';
+  if (mime.includes('webp')) return 'webp';
+  if (mime.includes('gif'))  return 'gif';
+  return 'jpg';
+}
+
+/**
+ * Decode a `data:image/...;base64,...` URI into a cache file and return the
+ * `file://` URI to it. Returns null when the input is not a recognisable data
+ * URI or the write fails.
+ */
+async function persistArtwork(
+  trackId: string,
+  dataUri: string | null | undefined,
+): Promise<string | null> {
+  if (!dataUri) return null;
+  // Pass-through if already a file/content URI (e.g. from a previous scan).
+  if (!dataUri.startsWith('data:')) return dataUri;
+
+  const match = /^data:([^;]+);base64,(.*)$/s.exec(dataUri);
+  if (!match) return null;
+
+  await ensureArtworkDir();
+  if (!artworkDirReady) return null;
+
+  const ext = extFromMime(match[1] ?? 'image/jpeg');
+  const fileUri = `${ARTWORK_DIR}/${safeArtworkBasename(trackId)}.${ext}`;
+  try {
+    await FileSystem.writeAsStringAsync(fileUri, match[2] ?? '', {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    return fileUri;
+  } catch {
+    return null;
+  }
 }
 
 export async function getScanPaths(): Promise<string[]> {
@@ -197,17 +263,11 @@ type RawMeta = {
   composer?: string | null;
   lyrics?: string | null;
   duration?: number;
+  bitrate?: number | null;
+  sampleRate?: number | null;
+  channels?: number | null;
   picture?: string | null;
 };
-
-function bytesToBase64(bytes: number[]): string {
-  const chunkSize = 8192;
-  let binary = '';
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    binary += String.fromCharCode(...bytes.slice(i, i + chunkSize));
-  }
-  return btoa(binary);
-}
 
 function parseSlashNum(raw: string | undefined, idx: 0 | 1): number | null {
   if (!raw) return null;
@@ -216,72 +276,83 @@ function parseSlashNum(raw: string | undefined, idx: 0 | 1): number | null {
   return isNaN(n) ? null : n;
 }
 
-async function readMetadata(uri: string): Promise<RawMeta> {
-  // jsmediatags doesn't support content:// SAF URIs — skip on those, the
-  // scanner will fall back to filename-derived title.
-  if (isSafUri(uri)) return {};
-
+/**
+ * Read metadata via jsmediatags — used only to extract USLT lyrics on
+ * non-SAF paths on Android, where the native module doesn't expose them.
+ */
+async function readLyricsJsmediatags(uri: string): Promise<string | null> {
   return new Promise((resolve) => {
     try {
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       const jsmediatags = require('jsmediatags');
       jsmediatags.read(uri, {
         onSuccess(tag: { tags: Record<string, unknown> }) {
-          const t = tag.tags;
-
-          // TRCK "5/12" → track number + total tracks
-          const trackRaw = t.track as string | undefined;
-          const track = parseSlashNum(trackRaw, 0);
-          const totalTracks = parseSlashNum(trackRaw, 1);
-
-          // TPOS "1/2" → disc number + total discs
-          const tposRaw =
-            (t.TPOS as { description?: string } | undefined)?.description ??
-            (t.TPOS as string | undefined);
-          const disc = parseSlashNum(tposRaw, 0);
-          const totalDiscs = parseSlashNum(tposRaw, 1);
-
-          // TCOM — composer
-          const composer =
-            (t.TCOM as { description?: string } | undefined)?.description ??
-            (t.composer as string | undefined) ??
-            null;
-
-          // USLT — unsynchronized lyrics
-          const uslt = t.USLT as { text?: string } | undefined;
-          const lyrics = uslt?.text ?? null;
-
-          // Embedded artwork (chunked to avoid call-stack overflow on large covers)
-          const picture = (t.picture as { data?: number[] } | undefined)?.data;
-
-          resolve({
-            title: (t.title as string | undefined) ?? undefined,
-            artist: (t.artist as string | undefined) ?? undefined,
-            album: (t.album as string | undefined) ?? undefined,
-            albumArtist:
-              ((t.TPE2 as { description?: string })?.description as string | undefined) ??
-              undefined,
-            genre: (t.genre as string | undefined) ?? undefined,
-            year: t.year as number | undefined,
-            track,
-            totalTracks,
-            disc,
-            totalDiscs,
-            composer,
-            lyrics,
-            picture: picture
-              ? `data:image/jpeg;base64,${bytesToBase64(picture)}`
-              : null,
-          });
+          const uslt = tag.tags.USLT as { text?: string } | undefined;
+          resolve(uslt?.text ?? null);
         },
         onError() {
-          resolve({});
+          resolve(null);
         },
       });
     } catch {
-      resolve({});
+      resolve(null);
     }
   });
+}
+
+/**
+ * Primary metadata reader: uses the native expo-audio-metadata module which
+ * calls MediaMetadataRetriever on Android and AVFoundation on iOS.
+ *
+ * - Supports both POSIX file paths and SAF (content://) URIs on Android.
+ * - For lyrics on Android (not exposed by MediaMetadataRetriever), falls back
+ *   to jsmediatags on non-SAF files.
+ */
+async function readMetadata(uri: string): Promise<RawMeta> {
+  try {
+    const native = await readAudioMetadata(uri);
+
+    const track       = parseSlashNum(native.trackNumber, 0);
+    const totalTracks = parseSlashNum(native.trackNumber, 1);
+    const disc        = parseSlashNum(native.discNumber, 0);
+    const totalDiscs  = parseSlashNum(native.discNumber, 1);
+
+    // duration from native is in ms → convert to seconds for storage
+    const duration = native.duration != null ? native.duration / 1000 : undefined;
+
+    const base: RawMeta = {
+      title:       native.title,
+      artist:      native.artist,
+      album:       native.album,
+      albumArtist: native.albumArtist,
+      genre:       native.genre,
+      year:        native.year != null ? parseInt(native.year, 10) : undefined,
+      composer:    native.composer ?? null,
+      track,
+      totalTracks,
+      disc,
+      totalDiscs,
+      duration,
+      bitrate:     native.bitrate ?? null,
+      sampleRate:  native.sampleRate ?? null,
+      channels:    native.channels ?? null,
+      picture:     native.artworkBase64 ?? null,
+    };
+
+    // iOS exposes lyrics natively; on Android they are absent from the native
+    // module — fall back to jsmediatags for non-SAF paths only.
+    if (native.lyrics) {
+      base.lyrics = native.lyrics;
+    } else if (!isSafUri(uri)) {
+      base.lyrics = await readLyricsJsmediatags(uri);
+    }
+
+    return base;
+  } catch {
+    // Native module unavailable (e.g. running in a test environment) or the
+    // file could not be opened. Return empty so the scanner uses fallback values.
+    return {};
+  }
 }
 
 function getBasename(uri: string): string {
@@ -360,14 +431,15 @@ export async function scanLibrary(
     const discNum = toNum(meta.disc);
     const lossless = isLossless(filename) ? 1 : 0;
     const id = makeId(uri);
+    const artworkUri = await persistArtwork(id, meta.picture);
 
     await db.runAsync(
       `INSERT INTO tracks (
         id, uri, title, artist, album, album_artist, genre, year,
         track_num, disc_num, total_tracks, total_discs, composer, lyrics,
-        duration, file_size, format, is_lossless,
+        duration, file_size, format, bitrate, sample_rate, channels, is_lossless,
         artwork_uri, date_added, date_modified
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,strftime('%s','now'),?)
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,strftime('%s','now'),?)
       ON CONFLICT(uri) DO UPDATE SET
         title=excluded.title, artist=excluded.artist, album=excluded.album,
         album_artist=excluded.album_artist, genre=excluded.genre, year=excluded.year,
@@ -375,14 +447,18 @@ export async function scanLibrary(
         total_tracks=excluded.total_tracks, total_discs=excluded.total_discs,
         composer=excluded.composer, lyrics=excluded.lyrics,
         duration=excluded.duration, file_size=excluded.file_size,
-        format=excluded.format, is_lossless=excluded.is_lossless,
+        format=excluded.format, bitrate=excluded.bitrate,
+        sample_rate=excluded.sample_rate, channels=excluded.channels,
+        is_lossless=excluded.is_lossless,
         artwork_uri=excluded.artwork_uri, date_modified=excluded.date_modified`,
       [
         id, uri, title, artist, album, albumArtist, genre, year,
         trackNum, discNum, meta.totalTracks ?? null, meta.totalDiscs ?? null,
         meta.composer ?? null, meta.lyrics ?? null,
-        meta.duration ?? 0, size, ext, lossless,
-        meta.picture ?? null, Math.floor(mtime),
+        meta.duration ?? 0, size, ext,
+        meta.bitrate ?? null, meta.sampleRate ?? null, meta.channels ?? null,
+        lossless,
+        artworkUri, Math.floor(mtime),
       ],
     );
     added++;
@@ -393,13 +469,22 @@ export async function scanLibrary(
 
   // Remove tracks whose files no longer exist
   const allUris = new Set(allFiles);
-  const storedRows = await db.getAllAsync<{ uri: string; id: string }>(
-    'SELECT uri, id FROM tracks',
-  );
+  const storedRows = await db.getAllAsync<{
+    uri: string;
+    id: string;
+    artwork_uri: string | null;
+  }>('SELECT uri, id, artwork_uri FROM tracks');
   let removed = 0;
   for (const row of storedRows) {
     if (!allUris.has(row.uri)) {
       await db.runAsync('DELETE FROM tracks WHERE id = ?', [row.id]);
+      if (row.artwork_uri && row.artwork_uri.startsWith(ARTWORK_DIR)) {
+        try {
+          await FileSystem.deleteAsync(row.artwork_uri, { idempotent: true });
+        } catch {
+          // Best-effort cleanup; cache will be reclaimed by Android otherwise.
+        }
+      }
       removed++;
     }
   }

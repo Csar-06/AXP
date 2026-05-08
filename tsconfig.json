@@ -6,6 +6,9 @@
     "paths": {
       "@/*": [
         "src/*"
+      ],
+      "expo-audio-metadata": [
+        "modules/expo-audio-metadata/src/index.ts"
       ]
     }
   },

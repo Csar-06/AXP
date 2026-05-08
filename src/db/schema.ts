@@ -27,6 +27,17 @@ async function runMigrations(database: SQLite.SQLiteDatabase): Promise<void> {
       await database.execAsync(def);
     }
   }
+
+  // Earlier versions stored embedded artwork as base64 `data:` URIs directly
+  // in `tracks.artwork_uri` and `albums.artwork_uri`. Pulling that into JS via
+  // SELECT * caused OOMs on libraries of any real size. Null those rows out
+  // so the next scan re-extracts artwork to cache files (see persistArtwork).
+  await database.runAsync(
+    "UPDATE tracks SET artwork_uri = NULL WHERE artwork_uri LIKE 'data:%'",
+  );
+  await database.runAsync(
+    "UPDATE albums SET artwork_uri = NULL WHERE artwork_uri LIKE 'data:%'",
+  );
 }
 
 export async function initDb(): Promise<void> {
