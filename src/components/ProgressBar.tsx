@@ -51,22 +51,22 @@ export function ProgressBar({ position, duration, isLossless, onSeek }: Props) {
 
 const styles = StyleSheet.create({
   container: {
-    gap: Spacing.sm,
-    paddingHorizontal: Spacing.base,
+    gap: Spacing.md,
+    paddingHorizontal: Spacing.xxl,
   },
   track: {
-    height: 3,
-    borderRadius: 2,
+    height: 9,
+    borderRadius: 8,
     flexDirection: 'row',
     overflow: 'hidden',
   },
   fill: {
     backgroundColor: Colors.textPrimary,
-    borderRadius: 2,
+    borderRadius: 8,
   },
   remaining: {
     backgroundColor: Colors.controlInactive,
-    borderRadius: 2,
+    // borderRadius: 2,
   },
   timeRow: {
     flexDirection: 'row',
@@ -80,9 +80,9 @@ const styles = StyleSheet.create({
   },
   badge: {
     backgroundColor: Colors.losslessBg,
-    borderRadius: 10,
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 2,
+    borderRadius: 4,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 2.5,
   },
   badgeText: {
     fontSize: Typography.xs,

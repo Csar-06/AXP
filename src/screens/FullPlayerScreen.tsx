@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   StatusBar,
   ScrollView,
   Modal,
+  Animated,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
@@ -46,6 +47,16 @@ export function FullPlayerScreen({ navigation }: Props) {
 
   const lightAssetSource = '/home/ibune/Projects/AXP/AXP/assets/light/'
 
+  const scale = useRef(new Animated.Value(isPlaying ? 1 : 0.786)).current;
+
+  useEffect(() => {
+    Animated.spring(scale, {
+      toValue: isPlaying ? 1 : 0.786,
+      useNativeDriver: true,
+      stiffness: 200,
+      damping: 18,
+    }).start();
+  }, [isPlaying])
 
   const repeatIcon =
     repeatMode === RepeatMode.Off
@@ -105,23 +116,19 @@ export function FullPlayerScreen({ navigation }: Props) {
 
         {/* Header */}
         <View style={styles.header}>
-          <Pressable onPress={handleClose} hitSlop={12}>
-            <Text style={styles.headerChevron}>⌄</Text>
-          </Pressable>
           <Text style={styles.headerTitle}>Reproduciendo</Text>
-          <Pressable hitSlop={12}>
-            <Text style={styles.headerMore}>···</Text>
-          </Pressable>
         </View>
 
         {/* Album art */}
         <View style={styles.artworkWrapper}>
-          <ArtworkImage
-            uri={currentTrack.artworkUri}
-            size={300}
-            radius={Radius.lg}
-            style={styles.artwork}
-          />
+          <Animated.View style={[styles.artwork, { transform: [{ scale }] }]} >
+            <ArtworkImage
+              uri={currentTrack.artworkUri}
+              size={350}
+              radius={Radius.lg}
+            />
+          </Animated.View>
+
         </View>
 
         {/* Track info */}
@@ -133,14 +140,12 @@ export function FullPlayerScreen({ navigation }: Props) {
             <Text style={styles.trackArtist} numberOfLines={1}>
               {currentTrack.artist}
             </Text>
-            {currentTrack.composer ? (
-              <Text style={styles.trackComposer} numberOfLines={1}>
-                {currentTrack.composer}
-              </Text>
-            ) : null}
           </View>
           <Pressable hitSlop={10}>
             <Text style={styles.starIcon}>☆</Text>
+          </Pressable>
+          <Pressable hitSlop={13}>
+            <Text style={styles.headerMore}>···</Text>
           </Pressable>
         </View>
 
@@ -187,41 +192,28 @@ export function FullPlayerScreen({ navigation }: Props) {
 
         {/* Secondary controls */}
         <View style={styles.secondaryControls}>
-          <Pressable onPress={toggleShuffle} hitSlop={10}>
-            <Text
-              style={[
-                styles.secondaryIcon,
-                isShuffle && styles.secondaryIconActive,
-              ]}
-            >
-              ⇄
-            </Text>
-          </Pressable>
-          <Pressable onPress={cycleRepeat} hitSlop={10}>
-            <Text
-              style={[
-                styles.secondaryIcon,
-                repeatActive && styles.secondaryIconActive,
-              ]}
-            >
-              {repeatIcon}
-            </Text>
-          </Pressable>
           <Pressable
             onPress={hasLyrics ? handleLyricsOpen : undefined}
             hitSlop={10}
           >
-            <Text
+            <Image
               style={[
                 styles.secondaryIcon,
-                hasLyrics ? styles.secondaryIconAvailable : styles.secondaryIconDisabled,
-              ]}
-            >
-              ♪
-            </Text>
+                hasLyrics ?
+                  { tintColor: Colors.textSecondary }
+                  :
+                  { tintColor: Colors.textTertiary }]}
+              source={require(`${lightAssetSource}light-lyrics-icon.png`)}
+            />
+
           </Pressable>
           <Pressable onPress={handleQueuePress} hitSlop={10}>
-            <Text style={styles.secondaryIcon}>☰</Text>
+            {/* <Text style={styles.secondaryIcon}>☰</Text> */}
+            <Image
+
+              style={[styles.secondaryIcon, { tintColor: Colors.textSecondary }]}
+              source={require(`${lightAssetSource}light-queque-icon.png`)}
+            />
           </Pressable>
         </View>
 
@@ -276,7 +268,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     paddingHorizontal: Spacing.base,
     paddingVertical: Spacing.md,
   },
@@ -294,26 +286,29 @@ const styles = StyleSheet.create({
   },
   headerMore: {
     fontSize: 20,
-    color: Colors.textPrimary,
-    letterSpacing: 2,
+    color: Colors.textSecondary,
   },
   artworkWrapper: {
+    flex: .85,
+    justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: Spacing.xl,
+    paddingVertical: Spacing.xxxl,
+
   },
   artwork: {
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.5,
     shadowRadius: 16,
-    elevation: 12,
+    elevation: 24,
+
   },
   infoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: Spacing.base,
+    paddingHorizontal: Spacing.xxl,
     paddingBottom: Spacing.lg,
-    gap: Spacing.md,
+    gap: Spacing.xl,
   },
   infoText: {
     flex: 1,
@@ -341,7 +336,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: Spacing.xxxl,
-    paddingVertical: Spacing.xl,
+    paddingVertical: Spacing.xxl,
   },
   controlIcon: {
     width: 52,
@@ -358,11 +353,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-around',
     paddingHorizontal: Spacing.xxxl,
-    paddingVertical: Spacing.md,
+    paddingVertical: Spacing.xs,
   },
   secondaryIcon: {
     fontSize: 22,
-    color: Colors.controlInactive,
+    width: 36,
+    height: 36,
+    resizeMode: 'contain',
   },
   secondaryIconActive: {
     color: Colors.accent,

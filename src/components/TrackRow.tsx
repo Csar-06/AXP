@@ -50,14 +50,14 @@ export const TrackRow = React.memo(function TrackRow({
           {track.title}
         </Text>
         <View style={styles.metaRow}>
+          <Text style={styles.subtitle} numberOfLines={1}>
+            {track.artist}
+          </Text>
           {track.isLossless && (
             <View style={styles.losslessBadge}>
               <Text style={styles.losslessText}>Lossless</Text>
             </View>
           )}
-          <Text style={styles.subtitle} numberOfLines={1}>
-            {track.artist}
-          </Text>
         </View>
       </View>
       <View style={styles.right}>
@@ -98,7 +98,7 @@ const styles = StyleSheet.create({
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.xs,
+    gap: Spacing.sm,
   },
   subtitle: {
     fontSize: Typography.sm,
@@ -109,7 +109,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.losslessBg,
     borderRadius: 4,
     paddingHorizontal: 4,
-    paddingVertical: 1,
+    paddingVertical: 2,
   },
   losslessText: {
     fontSize: 9,
