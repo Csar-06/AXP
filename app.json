@@ -17,7 +17,14 @@
         "READ_EXTERNAL_STORAGE",
         "FOREGROUND_SERVICE",
         "FOREGROUND_SERVICE_MEDIA_PLAYBACK",
-        "WAKE_LOCK"
+        "WAKE_LOCK",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
+        "android.permission.ACCESS_MEDIA_LOCATION",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.READ_MEDIA_AUDIO"
       ]
     },
     "ios": {
@@ -40,6 +47,12 @@
         }
       ],
       "expo-sqlite"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "bd6fbba9-475f-4a8d-8708-5bd8131a8a0c"
+      }
+    },
+    "owner": "cexxar"
   }
 }

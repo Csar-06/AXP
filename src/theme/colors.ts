@@ -28,7 +28,7 @@ export const Colors = {
 
   // Mini player
   miniPlayerBg: 'rgba(18,18,18,0.96)',
-  miniPlayerBorder: 'rgba(255,255,255,0.06)',
+  miniPlayerBorder: '#FFFFFF0F',
 
   // Tab bar
   tabBarBg: 'rgba(0,0,0,0.92)',

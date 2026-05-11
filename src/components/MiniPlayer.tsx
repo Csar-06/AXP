@@ -2,6 +2,7 @@ import React, { useRef, useEffect } from 'react';
 import {
   View,
   Text,
+  Image,
   Pressable,
   StyleSheet,
   Animated,
@@ -19,6 +20,7 @@ export function MiniPlayer({ onPress }: Props) {
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const togglePlayPause = usePlayerStore((s) => s.togglePlayPause);
   const next = usePlayerStore((s) => s.next);
+  const lightAssetSource = '/home/ibune/Projects/AXP/AXP/assets/light/'
 
   const opacity = useRef(new Animated.Value(currentTrack ? 1 : 0)).current;
 
@@ -57,9 +59,17 @@ export function MiniPlayer({ onPress }: Props) {
             hitSlop={10}
             style={styles.controlBtn}
           >
-            <Text style={styles.controlIcon}>
-              {isPlaying ? '⏸' : '▶'}
-            </Text>
+            {isPlaying ?
+              <Image
+                style={styles.controlIcon}
+                source={require(`${lightAssetSource}light-pause-icon.png`)}
+              />
+              :
+              <Image
+                style={styles.controlIcon}
+                source={require(`${lightAssetSource}light-play-icon.png`)}
+              />
+            }
           </Pressable>
           <Pressable
             onPress={(e) => {
@@ -69,7 +79,10 @@ export function MiniPlayer({ onPress }: Props) {
             hitSlop={10}
             style={styles.controlBtn}
           >
-            <Text style={styles.controlIcon}>⏭</Text>
+            <Image
+              style={styles.controlIcon}
+              source={require(`${lightAssetSource}light-forward-icon.png`)}
+            />
           </Pressable>
         </View>
       </Pressable>
@@ -106,13 +119,14 @@ const styles = StyleSheet.create({
   controls: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.md,
+    gap: Spacing.base,
   },
   controlBtn: {
-    padding: 4,
+    padding: 4
+,
   },
   controlIcon: {
-    fontSize: 20,
-    color: Colors.controlActive,
+    width: 32,
+    height: 32
   },
 });

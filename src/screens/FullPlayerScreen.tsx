@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
+  Image,
   Pressable,
   StyleSheet,
   StatusBar,
@@ -43,12 +44,15 @@ export function FullPlayerScreen({ navigation }: Props) {
 
   const [lyricsVisible, setLyricsVisible] = useState(false);
 
+  const lightAssetSource = '/home/ibune/Projects/AXP/AXP/assets/light/'
+
+
   const repeatIcon =
     repeatMode === RepeatMode.Off
       ? '↻'
       : repeatMode === RepeatMode.Queue
-      ? '↻'
-      : '①';
+        ? '↻'
+        : '①';
   const repeatActive = repeatMode !== RepeatMode.Off;
 
   const handleQueuePress = useCallback(() => {
@@ -59,7 +63,7 @@ export function FullPlayerScreen({ navigation }: Props) {
     navigation.goBack();
   }, [navigation]);
 
-  const handleLyricsOpen  = useCallback(() => setLyricsVisible(true),  []);
+  const handleLyricsOpen = useCallback(() => setLyricsVisible(true), []);
   const handleLyricsClose = useCallback(() => setLyricsVisible(false), []);
 
   // Reset the "open player" flag when the screen leaves so future plays
@@ -92,159 +96,175 @@ export function FullPlayerScreen({ navigation }: Props) {
 
   return (
     <GestureDetector gesture={dismissGesture}>
-    <LinearGradient
-      colors={[playerBg, playerBgSecondary, '#000000']}
-      locations={[0, 0.5, 1]}
-      style={[styles.container, { paddingTop: insets.top }]}
-    >
-      <StatusBar barStyle="light-content" />
-
-      {/* Header */}
-      <View style={styles.header}>
-        <Pressable onPress={handleClose} hitSlop={12}>
-          <Text style={styles.headerChevron}>⌄</Text>
-        </Pressable>
-        <Text style={styles.headerTitle}>Reproduciendo</Text>
-        <Pressable hitSlop={12}>
-          <Text style={styles.headerMore}>···</Text>
-        </Pressable>
-      </View>
-
-      {/* Album art */}
-      <View style={styles.artworkWrapper}>
-        <ArtworkImage
-          uri={currentTrack.artworkUri}
-          size={300}
-          radius={Radius.lg}
-          style={styles.artwork}
-        />
-      </View>
-
-      {/* Track info */}
-      <View style={styles.infoRow}>
-        <View style={styles.infoText}>
-          <Text style={styles.trackTitle} numberOfLines={1}>
-            {currentTrack.title}
-          </Text>
-          <Text style={styles.trackArtist} numberOfLines={1}>
-            {currentTrack.artist}
-          </Text>
-          {currentTrack.composer ? (
-            <Text style={styles.trackComposer} numberOfLines={1}>
-              {currentTrack.composer}
-            </Text>
-          ) : null}
-        </View>
-        <Pressable hitSlop={10}>
-          <Text style={styles.starIcon}>☆</Text>
-        </Pressable>
-      </View>
-
-      {/* Progress */}
-      <ProgressBar
-        position={position}
-        duration={duration}
-        isLossless={currentTrack.isLossless}
-        onSeek={seek}
-      />
-
-      {/* Main controls */}
-      <View style={styles.controls}>
-        <Pressable onPress={previous} hitSlop={10}>
-          <Text style={styles.controlIcon}>⏮</Text>
-        </Pressable>
-        <Pressable
-          onPress={togglePlayPause}
-          style={styles.playBtn}
-          hitSlop={4}
-        >
-          <Text style={styles.playIcon}>{isPlaying ? '⏸' : '▶'}</Text>
-        </Pressable>
-        <Pressable onPress={next} hitSlop={10}>
-          <Text style={styles.controlIcon}>⏭</Text>
-        </Pressable>
-      </View>
-
-      {/* Secondary controls */}
-      <View style={styles.secondaryControls}>
-        <Pressable onPress={toggleShuffle} hitSlop={10}>
-          <Text
-            style={[
-              styles.secondaryIcon,
-              isShuffle && styles.secondaryIconActive,
-            ]}
-          >
-            ⇄
-          </Text>
-        </Pressable>
-        <Pressable onPress={cycleRepeat} hitSlop={10}>
-          <Text
-            style={[
-              styles.secondaryIcon,
-              repeatActive && styles.secondaryIconActive,
-            ]}
-          >
-            {repeatIcon}
-          </Text>
-        </Pressable>
-        <Pressable
-          onPress={hasLyrics ? handleLyricsOpen : undefined}
-          hitSlop={10}
-        >
-          <Text
-            style={[
-              styles.secondaryIcon,
-              hasLyrics ? styles.secondaryIconAvailable : styles.secondaryIconDisabled,
-            ]}
-          >
-            ♪
-          </Text>
-        </Pressable>
-        <Pressable onPress={handleQueuePress} hitSlop={10}>
-          <Text style={styles.secondaryIcon}>☰</Text>
-        </Pressable>
-      </View>
-
-      <View style={{ paddingBottom: insets.bottom + Spacing.md }} />
-
-      {/* Lyrics overlay */}
-      <Modal
-        visible={lyricsVisible}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={handleLyricsClose}
+      <LinearGradient
+        colors={[playerBg, playerBgSecondary, '#000000']}
+        locations={[0, 0.5, 1]}
+        style={[styles.container, { paddingTop: insets.top }]}
       >
-        <LinearGradient
-          colors={[playerBg, playerBgSecondary, '#000000']}
-          locations={[0, 0.4, 1]}
-          style={[styles.lyricsModal, { paddingTop: insets.top }]}
-        >
-          <View style={styles.lyricsHeader}>
-            <View style={styles.lyricsHeaderInfo}>
-              <Text style={styles.lyricsSong} numberOfLines={1}>
-                {currentTrack.title}
+        <StatusBar barStyle="light-content" />
+
+        {/* Header */}
+        <View style={styles.header}>
+          <Pressable onPress={handleClose} hitSlop={12}>
+            <Text style={styles.headerChevron}>⌄</Text>
+          </Pressable>
+          <Text style={styles.headerTitle}>Reproduciendo</Text>
+          <Pressable hitSlop={12}>
+            <Text style={styles.headerMore}>···</Text>
+          </Pressable>
+        </View>
+
+        {/* Album art */}
+        <View style={styles.artworkWrapper}>
+          <ArtworkImage
+            uri={currentTrack.artworkUri}
+            size={300}
+            radius={Radius.lg}
+            style={styles.artwork}
+          />
+        </View>
+
+        {/* Track info */}
+        <View style={styles.infoRow}>
+          <View style={styles.infoText}>
+            <Text style={styles.trackTitle} numberOfLines={1}>
+              {currentTrack.title}
+            </Text>
+            <Text style={styles.trackArtist} numberOfLines={1}>
+              {currentTrack.artist}
+            </Text>
+            {currentTrack.composer ? (
+              <Text style={styles.trackComposer} numberOfLines={1}>
+                {currentTrack.composer}
               </Text>
-              <Text style={styles.lyricsArtist} numberOfLines={1}>
-                {currentTrack.artist}
-              </Text>
-            </View>
-            <Pressable onPress={handleLyricsClose} hitSlop={12}>
-              <Text style={styles.lyricsClose}>✕</Text>
-            </Pressable>
+            ) : null}
           </View>
-          <ScrollView
-            style={styles.lyricsScroll}
-            contentContainerStyle={[
-              styles.lyricsContent,
-              { paddingBottom: insets.bottom + Spacing.xxxl },
-            ]}
-            showsVerticalScrollIndicator={false}
+          <Pressable hitSlop={10}>
+            <Text style={styles.starIcon}>☆</Text>
+          </Pressable>
+        </View>
+
+        {/* Progress */}
+        <ProgressBar
+          position={position}
+          duration={duration}
+          isLossless={currentTrack.isLossless}
+          onSeek={seek}
+        />
+
+        {/* Main controls */}
+        <View style={styles.controls}>
+          <Pressable onPress={previous} hitSlop={10}>
+            <Image
+              style={styles.controlIcon}
+              source={require(`${lightAssetSource}light-back-icon.png`)}
+            />
+          </Pressable>
+          <Pressable
+            onPress={togglePlayPause}
+            style={styles.playBtn}
+            hitSlop={4}
           >
-            <Text style={styles.lyricsText}>{currentTrack.lyrics}</Text>
-          </ScrollView>
-        </LinearGradient>
-      </Modal>
-    </LinearGradient>
+            {isPlaying ?
+              <Image
+                style={styles.controlIcon}
+                source={require(`${lightAssetSource}light-pause-icon.png`)}
+              />
+              :
+              <Image
+                style={styles.controlIcon}
+                source={require(`${lightAssetSource}light-play-icon.png`)}
+              />}
+
+          </Pressable>
+          <Pressable onPress={next} hitSlop={10}>
+            <Image
+              style={styles.controlIcon}
+              source={require(`${lightAssetSource}light-forward-icon.png`)}
+            />
+          </Pressable>
+        </View>
+
+        {/* Secondary controls */}
+        <View style={styles.secondaryControls}>
+          <Pressable onPress={toggleShuffle} hitSlop={10}>
+            <Text
+              style={[
+                styles.secondaryIcon,
+                isShuffle && styles.secondaryIconActive,
+              ]}
+            >
+              ⇄
+            </Text>
+          </Pressable>
+          <Pressable onPress={cycleRepeat} hitSlop={10}>
+            <Text
+              style={[
+                styles.secondaryIcon,
+                repeatActive && styles.secondaryIconActive,
+              ]}
+            >
+              {repeatIcon}
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={hasLyrics ? handleLyricsOpen : undefined}
+            hitSlop={10}
+          >
+            <Text
+              style={[
+                styles.secondaryIcon,
+                hasLyrics ? styles.secondaryIconAvailable : styles.secondaryIconDisabled,
+              ]}
+            >
+              ♪
+            </Text>
+          </Pressable>
+          <Pressable onPress={handleQueuePress} hitSlop={10}>
+            <Text style={styles.secondaryIcon}>☰</Text>
+          </Pressable>
+        </View>
+
+        <View style={{ paddingBottom: insets.bottom + Spacing.md }} />
+
+        {/* Lyrics overlay */}
+        <Modal
+          visible={lyricsVisible}
+          animationType="slide"
+          presentationStyle="pageSheet"
+          onRequestClose={handleLyricsClose}
+        >
+          <LinearGradient
+            colors={[playerBg, playerBgSecondary, '#000000']}
+            locations={[0, 0.4, 1]}
+            style={[styles.lyricsModal, { paddingTop: insets.top }]}
+          >
+            <View style={styles.lyricsHeader}>
+              <View style={styles.lyricsHeaderInfo}>
+                <Text style={styles.lyricsSong} numberOfLines={1}>
+                  {currentTrack.title}
+                </Text>
+                <Text style={styles.lyricsArtist} numberOfLines={1}>
+                  {currentTrack.artist}
+                </Text>
+              </View>
+              <Pressable onPress={handleLyricsClose} hitSlop={12}>
+                <Text style={styles.lyricsClose}>✕</Text>
+              </Pressable>
+            </View>
+            <ScrollView
+              style={styles.lyricsScroll}
+              contentContainerStyle={[
+                styles.lyricsContent,
+                { paddingBottom: insets.bottom + Spacing.xxxl },
+              ]}
+              showsVerticalScrollIndicator={false}
+            >
+              <Text style={styles.lyricsText}>{currentTrack.lyrics}</Text>
+            </ScrollView>
+          </LinearGradient>
+        </Modal>
+      </LinearGradient>
     </GestureDetector>
   );
 }
@@ -324,20 +344,15 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.xl,
   },
   controlIcon: {
-    fontSize: 36,
-    color: Colors.controlActive,
+    width: 52,
+    height: 52
   },
   playBtn: {
     width: 72,
     height: 72,
     borderRadius: 36,
-    backgroundColor: Colors.textPrimary,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  playIcon: {
-    fontSize: 28,
-    color: '#000000',
   },
   secondaryControls: {
     flexDirection: 'row',

@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { StyleSheet, Text, Pressable } from 'react-native';
+import { StyleSheet, Text,Image, Pressable, ImageSourcePropType} from 'react-native';
 import {
   NavigationContainer,
   useNavigation,
@@ -35,12 +35,12 @@ import type { RootStackParamList, TabParamList } from './types';
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<TabParamList>();
 
-const TAB_ICONS: Record<keyof TabParamList, string> = {
-  Pistas: '♪',
-  Generos: '◈',
-  Albums: '⊞',
-  Artistas: '◉',
-  Listas: '☰',
+const TAB_ICONS: Record<keyof TabParamList, ImageSourcePropType> = {
+  Pistas:   require('../../assets/tabBarIcons/inactive-track-icon.png'),
+  Generos:  require('../../assets/tabBarIcons/inactive-genre-icon.png'),
+  Albums:   require('../../assets/tabBarIcons/inactive-album-icon.png'),
+  Artistas: require('../../assets/tabBarIcons/inactive-artist-icon.png'),
+  Listas:   require('../../assets/tabBarIcons/inactive-playlist-icon.png'),
 };
 
 function TabIcon({
@@ -49,16 +49,17 @@ function TabIcon({
 }: {
   name: keyof TabParamList;
   focused: boolean;
+  
 }) {
   return (
-    <Text
-      style={{
-        fontSize: 20,
-        color: focused ? Colors.tabBarActive : Colors.tabBarInactive,
-      }}
-    >
-      {TAB_ICONS[name]}
-    </Text>
+    <Image
+      source={TAB_ICONS[name]}
+      style={[
+        styles.tabBarIcon,
+        focused && { tintColor: Colors.accent },
+      ]}
+    />
+
   );
 }
 
@@ -228,5 +229,10 @@ const styles = StyleSheet.create({
   headerBtnIcon: {
     fontSize: 22,
     color: Colors.textPrimary,
+  },
+  tabBarIcon:{
+    width: 32,
+    height: 32,
+    resizeMode: 'contain',
   },
 });

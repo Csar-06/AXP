@@ -39,3 +39,7 @@ yarn-error.*
 
 # typescript
 *.tsbuildinfo
+
+# Native - iOS build EAS
+/ios
+/android
