@@ -52,7 +52,7 @@ export function FullPlayerScreen({ navigation }: Props) {
   useEffect(() => {
     Animated.spring(scale, {
       toValue: isPlaying ? 1 : 0.786,
-      useNativeDriver: true,
+      useNativeDriver: false,
       stiffness: 200,
       damping: 18,
     }).start();
