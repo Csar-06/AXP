@@ -56,20 +56,14 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   isPlayerVisible: false,
 
   play: async (tracks, startIndex = 0) => {
-    const { isShuffle } = get();
-    let ordered = tracks;
-    let index = startIndex;
-    if (isShuffle) {
-      ordered = shuffleTracks(tracks);
-      index = 0;
-    }
     set({
-      queue: ordered,
+      queue: tracks,
       originalQueue: tracks,
-      currentTrack: ordered[index] ?? null,
+      currentTrack: tracks[startIndex] ?? null,
       isPlayerVisible: true,
+      isShuffle: false,
     });
-    await loadAndPlay(ordered, index);
+    await loadAndPlay(tracks, startIndex);
   },
 
   togglePlayPause: async () => {
