@@ -77,16 +77,12 @@ export function FullPlayerScreen({ navigation }: Props) {
   const handleLyricsOpen = useCallback(() => setLyricsVisible(true), []);
   const handleLyricsClose = useCallback(() => setLyricsVisible(false), []);
 
-  // Reset the "open player" flag when the screen leaves so future plays
-  // can re-trigger navigation to this screen.
   useEffect(() => {
     return () => {
       usePlayerStore.getState().setPlayerVisible(false);
     };
   }, []);
 
-  // Swipe-down to dismiss. Activates only on a clear downward drag, so it
-  // doesn't fight the seek slider or other vertical interactions.
   const dismissGesture = useMemo(
     () =>
       Gesture.Pan()

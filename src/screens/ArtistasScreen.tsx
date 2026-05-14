@@ -50,7 +50,7 @@ export function ArtistasScreen() {
       <Pressable
         style={({ pressed }) => [
           styles.card,
-          { width: avatarSize, marginLeft: index % COLUMNS !== 0 ? Spacing.md : 0 },
+          { width: avatarSize },
           pressed && styles.pressed,
         ]}
         onPress={() => handlePress(item)}
@@ -102,6 +102,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: Spacing.lg,
     gap: Spacing.sm,
+    marginHorizontal: Spacing.xs,
   },
   pressed: { opacity: 0.7 },
   name: {

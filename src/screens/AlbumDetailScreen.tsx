@@ -17,6 +17,8 @@ import type { Track } from '@/db/library';
 import { Colors, Spacing, Typography, Radius } from '@/theme';
 import type { RootStackParamList } from '@/navigation/types';
 import { shuffleTracks } from '@/audio/AudioEngine';
+import { MiniPlayer } from '@/components/MiniPlayer';
+import { FullPlayerScreen } from '@/screens/FullPlayerScreen';
 import { formatDuration } from '@/utils/format';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AlbumDetail'>;
@@ -205,7 +207,7 @@ export function AlbumDetailScreen({ route, navigation }: Props) {
   const actions = (
     <View style={styles.actions}>
       <Pressable style={styles.actionBtn} onPress={handlePlay}>
-        <Text style={styles.actionBtnText}>▶  Reproducir</Text>
+        <Text style={styles.actionBtnText}>▶︎ Reproducir</Text>
       </Pressable>
       <Pressable
         style={[styles.actionBtn, styles.actionBtnOutline]}
@@ -261,11 +263,11 @@ export function AlbumDetailScreen({ route, navigation }: Props) {
         data={tracks}
         renderItem={({ item }) => (
           <TrackRow
-            track={item}
-            onPress={handleTrack}
-            showArtwork={false}
-            showTrackNum
-            isActive={item.id === currentTrack?.id}
+          track={item}
+          onPress={handleTrack}
+          showArtwork={false}
+          showTrackNum
+          isActive={item.id === currentTrack?.id}
           />
         )}
         estimatedItemSize={56}
@@ -278,6 +280,7 @@ export function AlbumDetailScreen({ route, navigation }: Props) {
         }
         contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
       />
+        <MiniPlayer onPress={() => usePlayerStore.getState().setPlayerVisible(true)} />
     </View>
   );
 }
@@ -286,6 +289,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.bg,
+    paddingBottom: Spacing.base,
   },
   centered: {
     alignItems: 'stretch',
@@ -344,7 +348,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.accent,
     borderRadius: Radius.xl,
-    paddingVertical: Spacing.md,
+    paddingVertical: Spacing.base,
     alignItems: 'center',
   },
   actionBtnOutline: {
