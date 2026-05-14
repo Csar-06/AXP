@@ -18,8 +18,6 @@ import { Colors, Spacing, Typography, Radius } from '@/theme';
 import type { RootStackParamList } from '@/navigation/types';
 import { shuffleTracks } from '@/audio/AudioEngine';
 import { MiniPlayer } from '@/components/MiniPlayer';
-import { FullPlayerScreen } from '@/screens/FullPlayerScreen';
-import { formatDuration } from '@/utils/format';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AlbumDetail'>;
 

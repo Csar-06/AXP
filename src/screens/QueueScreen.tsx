@@ -414,13 +414,10 @@ const styles = StyleSheet.create({
   deleteActionContainer: {
     justifyContent: 'center',
     alignItems: 'flex-end',
-    paddingRight: Spacing.base,
-    paddingVertical: Spacing.xs,
   },
   deleteAction: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 90,
+    height: 80,
     backgroundColor: DESTRUCTIVE,
     alignItems: 'center',
     justifyContent: 'center',

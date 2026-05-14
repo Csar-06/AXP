@@ -125,7 +125,7 @@ const styles = StyleSheet.create({
     color: Colors.textTertiary,
   },
   trackNum: {
-    width: 28,
+    width: '8%',
     fontSize: Typography.base,
     color: Colors.textSecondary,
     textAlign: 'right',
