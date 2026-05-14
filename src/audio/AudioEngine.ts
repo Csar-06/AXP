@@ -81,6 +81,22 @@ export async function addToQueue(track: Track): Promise<void> {
   await TrackPlayer.add({ ...toRNTPTrack(track), url });
 }
 
+/**
+ * Replaces all tracks after the current one in the RNTP queue with a new ordered list.
+ * Used by shuffle/unshuffle to reorder upcoming tracks without interrupting playback.
+ */
+export async function replaceUpcomingTracks(tracks: Track[]): Promise<void> {
+  await TrackPlayer.removeUpcomingTracks();
+  if (tracks.length === 0) return;
+  const resolved = await Promise.all(
+    tracks.map(async (t) => {
+      const url = await resolvePlaybackUri(t.uri);
+      return { ...toRNTPTrack(t), url };
+    }),
+  );
+  await TrackPlayer.add(resolved);
+}
+
 export async function removeFromQueue(index: number): Promise<void> {
   await TrackPlayer.remove(index);
 }

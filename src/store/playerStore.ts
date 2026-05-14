@@ -13,11 +13,13 @@ import {
   skipToPrevious,
   setRepeatMode,
   shuffleTracks,
+  replaceUpcomingTracks,
 } from '@/audio/AudioEngine';
 
 export type PlayerState = {
   currentTrack: Track | null;
   queue: Track[];
+  originalQueue: Track[];
   isPlaying: boolean;
   isShuffle: boolean;
   repeatMode: RepeatMode;
@@ -31,8 +33,10 @@ export type PlayerState = {
   next: () => Promise<void>;
   previous: () => Promise<void>;
   seek: (pos: number) => Promise<void>;
-  toggleShuffle: () => void;
+  toggleShuffle: () => Promise<void>;
   cycleRepeat: () => Promise<void>;
+  removeFromQueue: (index: number) => Promise<void>;
+  clearUpcoming: () => Promise<void>;
   setCurrentTrack: (track: Track | null) => void;
   setIsPlaying: (v: boolean) => void;
   setPosition: (pos: number) => void;
@@ -43,6 +47,7 @@ export type PlayerState = {
 export const usePlayerStore = create<PlayerState>((set, get) => ({
   currentTrack: null,
   queue: [],
+  originalQueue: [],
   isPlaying: false,
   isShuffle: false,
   repeatMode: RepeatMode.Off,
@@ -60,6 +65,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     }
     set({
       queue: ordered,
+      originalQueue: tracks,
       currentTrack: ordered[index] ?? null,
       isPlayerVisible: true,
     });
@@ -83,8 +89,35 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     set({ position: pos });
   },
 
-  toggleShuffle: () => {
-    set((s) => ({ isShuffle: !s.isShuffle }));
+  toggleShuffle: async () => {
+    const { isShuffle, queue, currentTrack, originalQueue } = get();
+    const newShuffle = !isShuffle;
+    set({ isShuffle: newShuffle });
+
+    if (!currentTrack) return;
+    const currentIdx = queue.findIndex((t) => t.id === currentTrack.id);
+    if (currentIdx < 0) return;
+
+    const played = queue.slice(0, currentIdx + 1);
+    const upcoming = queue.slice(currentIdx + 1);
+
+    let newUpcoming: Track[];
+    if (newShuffle) {
+      newUpcoming = shuffleTracks(upcoming);
+    } else {
+      // Restore original order for the tracks still in upcoming
+      const upcomingIds = new Set(upcoming.map((t) => t.id));
+      newUpcoming = originalQueue.filter((t) => upcomingIds.has(t.id));
+    }
+
+    const newQueue = [...played, ...newUpcoming];
+    set({ queue: newQueue });
+
+    try {
+      await replaceUpcomingTracks(newUpcoming);
+    } catch (e) {
+      console.warn('[playerStore] toggleShuffle replaceUpcomingTracks failed:', e);
+    }
   },
 
   cycleRepeat: async () => {
@@ -97,6 +130,31 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         : RepeatMode.Off;
     await setRepeatMode(next);
     set({ repeatMode: next });
+  },
+
+  removeFromQueue: async (index) => {
+    const { queue } = get();
+    if (index < 0 || index >= queue.length) return;
+    const next = [...queue.slice(0, index), ...queue.slice(index + 1)];
+    set({ queue: next });
+    try {
+      await TrackPlayer.remove(index);
+    } catch (e) {
+      console.warn('[playerStore] remove failed:', e);
+    }
+  },
+
+  clearUpcoming: async () => {
+    const { queue, currentTrack } = get();
+    if (!currentTrack) return;
+    const idx = queue.findIndex((t) => t.id === currentTrack.id);
+    if (idx < 0) return;
+    set({ queue: queue.slice(0, idx + 1) });
+    try {
+      await TrackPlayer.removeUpcomingTracks();
+    } catch (e) {
+      console.warn('[playerStore] removeUpcomingTracks failed:', e);
+    }
   },
 
   setCurrentTrack: (track) => set({ currentTrack: track }),
