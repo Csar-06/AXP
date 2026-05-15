@@ -76,9 +76,40 @@ export function shuffleTracks<T>(tracks: T[]): T[] {
   return arr;
 }
 
+async function resolveTracksForPlayer(tracks: Track[]): Promise<RNTPTrack[]> {
+  return Promise.all(
+    tracks.map(async (t) => {
+      const url = await resolvePlaybackUri(t.uri);
+      return { ...toRNTPTrack(t), url };
+    }),
+  );
+}
+
 export async function addToQueue(track: Track): Promise<void> {
   const url = await resolvePlaybackUri(track.uri);
   await TrackPlayer.add({ ...toRNTPTrack(track), url });
+}
+
+/** Append tracks at the end of the RNTP queue. */
+export async function addTracksToEnd(tracks: Track[]): Promise<void> {
+  if (tracks.length === 0) return;
+  const resolved = await resolveTracksForPlayer(tracks);
+  await TrackPlayer.add(resolved);
+}
+
+/**
+ * Insert tracks immediately after the active track.
+ * If nothing is active, appends to the end of the queue.
+ */
+export async function insertTracksAfterCurrent(tracks: Track[]): Promise<void> {
+  if (tracks.length === 0) return;
+  const resolved = await resolveTracksForPlayer(tracks);
+  const idx = await TrackPlayer.getActiveTrackIndex();
+  if (idx === undefined || idx < 0) {
+    await TrackPlayer.add(resolved);
+    return;
+  }
+  await TrackPlayer.add(resolved, idx + 1);
 }
 
 /**

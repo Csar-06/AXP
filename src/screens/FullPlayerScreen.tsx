@@ -9,17 +9,20 @@ import {
   ScrollView,
   Modal,
   Animated,
+  FlatList,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { ArtworkImage } from '@/components/ArtworkImage';
+import { CreatePlaylistModal } from '@/components/CreatePlaylistModal';
 import { ProgressBar } from '@/components/ProgressBar';
 import { usePlayerStore } from '@/store/playerStore';
 import { useLibraryStore } from '@/store/libraryStore';
 import { useThemeStore } from '@/store/themeStore';
 import { RepeatMode } from '@/audio/TrackPlayerSetup';
+import { addTrackToPlaylist } from '@/db/library';
 import { Colors, Spacing, Typography, Radius } from '@/theme';
 import type { RootStackParamList } from '@/navigation/types';
 
@@ -46,8 +49,13 @@ export function FullPlayerScreen({ navigation }: Props) {
 
   const isFavorite = useLibraryStore((s) => !!s.favoriteTrackIds[currentTrack?.id ?? '']);
   const toggleFavorite = useLibraryStore((s) => s.toggleFavorite);
+  const playlists = useLibraryStore((s) => s.playlists);
+  const refreshPlaylists = useLibraryStore((s) => s.refreshPlaylists);
 
   const [lyricsVisible, setLyricsVisible] = useState(false);
+  const [trackMenuVisible, setTrackMenuVisible] = useState(false);
+  const [playlistPickerVisible, setPlaylistPickerVisible] = useState(false);
+  const [createPlaylistVisible, setCreatePlaylistVisible] = useState(false);
 
   const lightAssetSource = '/home/ibune/Projects/AXP/AXP/assets/light/'
 
@@ -137,6 +145,43 @@ export function FullPlayerScreen({ navigation }: Props) {
   const handleLyricsOpen = useCallback(() => setLyricsVisible(true), []);
   const handleLyricsClose = useCallback(() => setLyricsVisible(false), []);
 
+  const openTrackMenu = useCallback(() => setTrackMenuVisible(true), []);
+  const closeTrackMenu = useCallback(() => setTrackMenuVisible(false), []);
+
+  const handleChooseAddToPlaylist = useCallback(() => {
+    setTrackMenuVisible(false);
+    setPlaylistPickerVisible(true);
+  }, []);
+
+  const handleGoToAlbum = useCallback(() => {
+    if (!currentTrack) return;
+    setTrackMenuVisible(false);
+    navigation.navigate('AlbumDetail', {
+      albumTitle: currentTrack.album,
+      albumArtist: currentTrack.albumArtist,
+    });
+  }, [currentTrack, navigation]);
+
+  const handleSelectPlaylist = useCallback(
+    async (playlistId: string) => {
+      if (!currentTrack) return;
+      await addTrackToPlaylist(playlistId, currentTrack.id);
+      await refreshPlaylists();
+      setPlaylistPickerVisible(false);
+    },
+    [currentTrack, refreshPlaylists],
+  );
+
+  const handlePlaylistCreatedFromPlayer = useCallback(
+    async (playlistId: string) => {
+      if (!currentTrack) return;
+      await addTrackToPlaylist(playlistId, currentTrack.id);
+      await refreshPlaylists();
+      setPlaylistPickerVisible(false);
+    },
+    [currentTrack, refreshPlaylists],
+  );
+
   useEffect(() => {
     return () => {
       usePlayerStore.getState().setPlayerVisible(false);
@@ -155,6 +200,14 @@ export function FullPlayerScreen({ navigation }: Props) {
           }
         }),
     [handleClose],
+  );
+
+  const playlistPickerData = useMemo(
+    () => [
+      { kind: 'new' as const },
+      ...playlists.map((p) => ({ kind: 'playlist' as const, playlist: p })),
+    ],
+    [playlists],
   );
 
   if (!currentTrack) return null;
@@ -208,8 +261,8 @@ export function FullPlayerScreen({ navigation }: Props) {
               </Text>
             </Animated.View>
           </Pressable>
-          <Pressable hitSlop={13}>
-            <Text style={styles.headerMore}>···</Text>
+          <Pressable onPress={openTrackMenu} hitSlop={13}>
+            <Text style={styles.moreOptions}>···</Text>
           </Pressable>
         </View>
 
@@ -272,7 +325,6 @@ export function FullPlayerScreen({ navigation }: Props) {
 
           </Pressable>
           <Pressable onPress={handleQueuePress} hitSlop={10}>
-            {/* <Text style={styles.secondaryIcon}>☰</Text> */}
             <Image
 
               style={[styles.secondaryIcon, { tintColor: Colors.textSecondary }]}
@@ -320,6 +372,106 @@ export function FullPlayerScreen({ navigation }: Props) {
             </ScrollView>
           </LinearGradient>
         </Modal>
+
+        <Modal
+          visible={trackMenuVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={closeTrackMenu}
+        >
+          <View style={styles.trackMenuRoot}>
+            <Pressable
+              style={styles.trackMenuBackdrop}
+              onPress={closeTrackMenu}
+            />
+            <View
+              style={[
+                styles.trackMenuSheet,
+                { paddingBottom: insets.bottom + Spacing.md },
+              ]}
+            >
+              <Pressable
+                style={styles.trackMenuRow}
+                onPress={handleChooseAddToPlaylist}
+              >
+                <Text style={styles.trackMenuRowLabel}>Agregar a playlist</Text>
+              </Pressable>
+              <Pressable style={styles.trackMenuRow} onPress={handleGoToAlbum}>
+                <Text style={styles.trackMenuRowLabel}>Ir al álbum</Text>
+              </Pressable>
+              <Pressable style={styles.trackMenuRowLast} onPress={closeTrackMenu}>
+                <Text style={styles.trackMenuCancel}>Cancelar</Text>
+              </Pressable>
+            </View>
+          </View>
+        </Modal>
+
+        <Modal
+          visible={playlistPickerVisible}
+          animationType="slide"
+          presentationStyle="pageSheet"
+          onRequestClose={() => setPlaylistPickerVisible(false)}
+        >
+          <View style={[styles.playlistPickerRoot, { paddingTop: insets.top }]}>
+            <View style={styles.playlistPickerHeader}>
+              <Text style={styles.playlistPickerTitle}>Agregar a lista</Text>
+              <Pressable
+                onPress={() => setPlaylistPickerVisible(false)}
+                hitSlop={12}
+              >
+                <Text style={styles.lyricsClose}>✕</Text>
+              </Pressable>
+            </View>
+            <FlatList
+              data={playlistPickerData}
+              keyExtractor={(item) =>
+                item.kind === 'new' ? '__new__' : item.playlist.id
+              }
+              style={styles.playlistPickerList}
+              contentContainerStyle={{
+                paddingBottom: insets.bottom + Spacing.xl,
+              }}
+              renderItem={({ item }) =>
+                item.kind === 'new' ? (
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.playlistPickerRow,
+                      pressed && styles.playlistPickerRowPressed,
+                    ]}
+                    onPress={() => setCreatePlaylistVisible(true)}
+                  >
+                    <Text style={styles.playlistPickerNewLabel}>
+                      + Nueva playlist
+                    </Text>
+                  </Pressable>
+                ) : (
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.playlistPickerRow,
+                      pressed && styles.playlistPickerRowPressed,
+                    ]}
+                    onPress={() => handleSelectPlaylist(item.playlist.id)}
+                  >
+                    <ArtworkImage
+                      uri={item.playlist.artworkUri}
+                      size={44}
+                      radius={Radius.sm}
+                    />
+                    <Text style={styles.playlistPickerName} numberOfLines={1}>
+                      {item.playlist.name}
+                    </Text>
+                  </Pressable>
+                )
+              }
+            />
+          </View>
+        </Modal>
+
+        <CreatePlaylistModal
+          visible={createPlaylistVisible}
+          onClose={() => setCreatePlaylistVisible(false)}
+          onCreated={handlePlaylistCreatedFromPlayer}
+        />
       </LinearGradient>
     </GestureDetector>
   );
@@ -348,7 +500,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     textTransform: 'uppercase',
   },
-  headerMore: {
+  moreOptions: {
     fontSize: 20,
     color: Colors.textSecondary,
   },
@@ -481,6 +633,84 @@ const styles = StyleSheet.create({
   lyricsText: {
     fontSize: Typography.base,
     lineHeight: 28,
+    color: Colors.textPrimary,
+  },
+
+  trackMenuRoot: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  trackMenuBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  trackMenuSheet: {
+    backgroundColor: Colors.bgElevated,
+    borderTopLeftRadius: Radius.lg,
+    borderTopRightRadius: Radius.lg,
+    paddingTop: Spacing.sm,
+  },
+  trackMenuRow: {
+    paddingVertical: Spacing.lg,
+    paddingHorizontal: Spacing.base,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.separator,
+  },
+  trackMenuRowLast: {
+    paddingVertical: Spacing.lg,
+    paddingHorizontal: Spacing.base,
+  },
+  trackMenuRowLabel: {
+    fontSize: Typography.md,
+    color: Colors.textPrimary,
+    textAlign: 'center',
+  },
+  trackMenuCancel: {
+    fontSize: Typography.md,
+    fontWeight: Typography.semibold,
+    color: Colors.accent,
+    textAlign: 'center',
+  },
+  playlistPickerRoot: {
+    flex: 1,
+    backgroundColor: Colors.bg,
+  },
+  playlistPickerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.base,
+    paddingVertical: Spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.separator,
+  },
+  playlistPickerTitle: {
+    flex: 1,
+    fontSize: Typography.md,
+    fontWeight: Typography.semibold,
+    color: Colors.textPrimary,
+  },
+  playlistPickerList: {
+    flex: 1,
+  },
+  playlistPickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    paddingHorizontal: Spacing.base,
+    paddingVertical: Spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.separator,
+  },
+  playlistPickerRowPressed: { opacity: 0.65 },
+  playlistPickerNewLabel: {
+    flex: 1,
+    fontSize: Typography.base,
+    fontWeight: Typography.medium,
+    color: Colors.accent,
+  },
+  playlistPickerName: {
+    flex: 1,
+    fontSize: Typography.base,
     color: Colors.textPrimary,
   },
 });

@@ -14,6 +14,8 @@ import {
   setRepeatMode,
   shuffleTracks,
   replaceUpcomingTracks,
+  addTracksToEnd,
+  insertTracksAfterCurrent as insertTracksAfterCurrentInPlayer,
 } from '@/audio/AudioEngine';
 
 export type PlayerState = {
@@ -37,6 +39,10 @@ export type PlayerState = {
   cycleRepeat: () => Promise<void>;
   removeFromQueue: (index: number) => Promise<void>;
   clearUpcoming: () => Promise<void>;
+  /** Append tracks to RNTP and local queue / originalQueue. */
+  appendTracksToQueue: (tracks: Track[]) => Promise<void>;
+  /** Insert after current track in RNTP and both local queues; if idle, appends. */
+  insertTracksAfterCurrent: (tracks: Track[]) => Promise<void>;
   setCurrentTrack: (track: Track | null) => void;
   setIsPlaying: (v: boolean) => void;
   setPosition: (pos: number) => void;
@@ -148,6 +154,50 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       await TrackPlayer.removeUpcomingTracks();
     } catch (e) {
       console.warn('[playerStore] removeUpcomingTracks failed:', e);
+    }
+  },
+
+  appendTracksToQueue: async (tracks) => {
+    if (tracks.length === 0) return;
+    const { queue, originalQueue } = get();
+    set({
+      queue: [...queue, ...tracks],
+      originalQueue: [...originalQueue, ...tracks],
+    });
+    try {
+      await addTracksToEnd(tracks);
+    } catch (e) {
+      console.warn('[playerStore] appendTracksToQueue failed:', e);
+    }
+  },
+
+  insertTracksAfterCurrent: async (tracks) => {
+    if (tracks.length === 0) return;
+    const { queue, originalQueue, currentTrack } = get();
+    if (!currentTrack) {
+      await get().appendTracksToQueue(tracks);
+      return;
+    }
+    const qIdx = queue.findIndex((t) => t.id === currentTrack.id);
+    const insertAt = qIdx >= 0 ? qIdx + 1 : queue.length;
+    const newQueue = [
+      ...queue.slice(0, insertAt),
+      ...tracks,
+      ...queue.slice(insertAt),
+    ];
+
+    const oIdx = originalQueue.findIndex((t) => t.id === currentTrack.id);
+    const oInsert = oIdx >= 0 ? oIdx + 1 : originalQueue.length;
+    const newOriginal = [
+      ...originalQueue.slice(0, oInsert),
+      ...tracks,
+      ...originalQueue.slice(oInsert),
+    ];
+    set({ queue: newQueue, originalQueue: newOriginal });
+    try {
+      await insertTracksAfterCurrentInPlayer(tracks);
+    } catch (e) {
+      console.warn('[playerStore] insertTracksAfterCurrent failed:', e);
     }
   },
 

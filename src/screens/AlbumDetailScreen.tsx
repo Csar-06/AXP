@@ -242,7 +242,7 @@ export function AlbumDetailScreen({ route, navigation }: Props) {
   // Multi-disc: use FlashList with header/track items
   if (isMultiDisc) {
     return (
-      <View style={[styles.container, { paddingBottom: insets.bottom + 80 }]}>
+      <View style={[styles.container]}>
         <FlashList
           data={listData}
           renderItem={renderItem}
@@ -259,8 +259,11 @@ export function AlbumDetailScreen({ route, navigation }: Props) {
               {actions}
             </>
           }
-          contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
+          
+          contentContainerStyle={{ paddingBottom: insets.bottom }}
         />
+        <MiniPlayer onPress={() => usePlayerStore.getState().setPlayerVisible(true)} />
+
       </View>
     );
   }

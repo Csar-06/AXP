@@ -31,6 +31,7 @@
       "bundleIdentifier": "com.axp.player",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "AXP no usa el micrófono.",
+        "NSPhotoLibraryUsageDescription": "AXP puede usar una foto de tu galería como portada de listas de reproducción.",
         "NSAppleMusicUsageDescription": "AXP necesita acceso a tu biblioteca de música.",
         "UIBackgroundModes": [
           "audio"
@@ -41,7 +42,7 @@
       [
         "expo-media-library",
         {
-          "photosPermission": false,
+          "photosPermission": "AXP puede leer fotos de tu galería para elegir la portada de una lista.",
           "savePhotosPermission": false,
           "isAccessMediaLocationEnabled": true
         }

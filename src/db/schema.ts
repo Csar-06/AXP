@@ -28,6 +28,16 @@ async function runMigrations(database: SQLite.SQLiteDatabase): Promise<void> {
     }
   }
 
+  const playlistCols = await database.getAllAsync<{ name: string }>(
+    'PRAGMA table_info(playlists)',
+  );
+  const playlistExisting = new Set(playlistCols.map((c) => c.name));
+  if (!playlistExisting.has('description')) {
+    await database.execAsync(
+      'ALTER TABLE playlists ADD COLUMN description TEXT',
+    );
+  }
+
   // Earlier versions stored embedded artwork as base64 `data:` URIs directly
   // in `tracks.artwork_uri` and `albums.artwork_uri`. Pulling that into JS via
   // SELECT * caused OOMs on libraries of any real size. Null those rows out
@@ -97,6 +107,7 @@ export async function initDb(): Promise<void> {
       id          TEXT PRIMARY KEY,
       name        TEXT NOT NULL,
       artwork_uri TEXT,
+      description TEXT,
       created_at  INTEGER NOT NULL DEFAULT (strftime('%s','now')),
       updated_at  INTEGER NOT NULL DEFAULT (strftime('%s','now'))
     );

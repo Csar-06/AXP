@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { StyleSheet, Text,Image, Pressable, ImageSourcePropType} from 'react-native';
+import { StyleSheet, Image, ImageSourcePropType} from 'react-native';
 import {
   NavigationContainer,
   useNavigation,
@@ -28,6 +28,7 @@ import { FullPlayerScreen } from '@/screens/FullPlayerScreen';
 import { QueueScreen } from '@/screens/QueueScreen';
 import { ScanSettingsScreen } from '@/screens/ScanSettingsScreen';
 import { MiniPlayer } from '@/components/MiniPlayer';
+import { HeaderSettingsButton } from '@/components/HeaderSettingsButton';
 import { usePlayerStore } from '@/store/playerStore';
 import { Colors, Typography } from '@/theme';
 import type { RootStackParamList, TabParamList } from './types';
@@ -60,20 +61,6 @@ function TabIcon({
       ]}
     />
 
-  );
-}
-
-function HeaderSettingsButton() {
-  const navigation =
-    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  return (
-    <Pressable
-      onPress={() => navigation.navigate('ScanSettings')}
-      hitSlop={12}
-      style={styles.headerBtn}
-    >
-      <Text style={styles.headerBtnIcon}>⚙</Text>
-    </Pressable>
   );
 }
 
@@ -222,14 +209,6 @@ export function AppNavigator() {
 }
 
 const styles = StyleSheet.create({
-  headerBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-  },
-  headerBtnIcon: {
-    fontSize: 22,
-    color: Colors.textPrimary,
-  },
   tabBarIcon:{
     width: 32,
     height: 32,

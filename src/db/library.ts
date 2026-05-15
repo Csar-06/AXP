@@ -57,6 +57,7 @@ export type Playlist = {
   id: string;
   name: string;
   artworkUri: string | null;
+  description: string | null;
   createdAt: number;
   updatedAt: number;
 };
@@ -92,7 +93,9 @@ function makeId(...parts: string[]): string {
 // decoded bytes to a cache file once during scan and store only its URI.
 
 const ARTWORK_DIR = `${FileSystem.cacheDirectory ?? ''}artwork`;
+const PLAYLIST_COVER_DIR = `${ARTWORK_DIR}/playlist-covers`;
 let artworkDirReady = false;
+let playlistCoverDirReady = false;
 
 async function ensureArtworkDir(): Promise<void> {
   if (artworkDirReady) return;
@@ -117,6 +120,42 @@ function extFromMime(mime: string): string {
   if (mime.includes('webp')) return 'webp';
   if (mime.includes('gif'))  return 'gif';
   return 'jpg';
+}
+
+async function ensurePlaylistCoverDir(): Promise<void> {
+  if (playlistCoverDirReady) return;
+  await ensureArtworkDir();
+  if (!artworkDirReady) return;
+  try {
+    const info = await FileSystem.getInfoAsync(PLAYLIST_COVER_DIR);
+    if (!info.exists) {
+      await FileSystem.makeDirectoryAsync(PLAYLIST_COVER_DIR, {
+        intermediates: true,
+      });
+    }
+    playlistCoverDirReady = true;
+  } catch {
+    playlistCoverDirReady = false;
+  }
+}
+
+/** Copy a gallery / picker image into app cache; returns stable `file://` URI. */
+export async function persistPlaylistCoverFromPick(
+  sourceUri: string,
+): Promise<string | null> {
+  if (!sourceUri?.trim()) return null;
+  await ensurePlaylistCoverDir();
+  if (!playlistCoverDirReady) return null;
+  const extMatch = /\.(jpe?g|png|webp|gif)$/i.exec(sourceUri);
+  const raw = extMatch?.[1]?.toLowerCase() ?? 'jpg';
+  const ext = raw === 'jpeg' ? 'jpg' : raw;
+  const dest = `${PLAYLIST_COVER_DIR}/pl-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+  try {
+    await FileSystem.copyAsync({ from: sourceUri, to: dest });
+    return dest;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -724,13 +763,50 @@ export async function getPlaylists(search?: string): Promise<Playlist[]> {
     : await db.getAllAsync<Record<string, unknown>>(
         'SELECT * FROM playlists ORDER BY name ASC',
       );
-  return rows.map((r) => ({
+  return rows.map(rowToPlaylist);
+}
+
+function rowToPlaylist(r: Record<string, unknown>): Playlist {
+  return {
     id: r.id as string,
     name: r.name as string,
     artworkUri: r.artwork_uri as string | null,
+    description: (r.description as string | null | undefined) ?? null,
     createdAt: r.created_at as number,
     updatedAt: r.updated_at as number,
-  }));
+  };
+}
+
+export async function getPlaylistById(
+  id: string,
+): Promise<Playlist | null> {
+  const db = await getDb();
+  const row = await db.getFirstAsync<Record<string, unknown>>(
+    'SELECT * FROM playlists WHERE id = ? LIMIT 1',
+    [id],
+  );
+  return row ? rowToPlaylist(row) : null;
+}
+
+export async function updatePlaylist(
+  id: string,
+  fields: {
+    name: string;
+    artworkUri: string | null;
+    description: string | null;
+  },
+): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    `UPDATE playlists SET name = ?, artwork_uri = ?, description = ?,
+      updated_at = strftime('%s','now') WHERE id = ?`,
+    [
+      fields.name.trim(),
+      fields.artworkUri,
+      fields.description?.trim() ? fields.description.trim() : null,
+      id,
+    ],
+  );
 }
 
 export async function getPlaylistTracks(playlistId: string): Promise<Track[]> {
@@ -769,12 +845,23 @@ export async function getFavoriteTrackIds(): Promise<string[]> {
   return rows.map((r) => r.track_id);
 }
 
-export async function createPlaylist(name: string): Promise<string> {
+export type CreatePlaylistOptions = {
+  artworkUri?: string | null;
+  description?: string | null;
+};
+
+export async function createPlaylist(
+  name: string,
+  opts?: CreatePlaylistOptions,
+): Promise<string> {
   const db = await getDb();
   const id = `pl-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const artworkUri = opts?.artworkUri ?? null;
+  const description =
+    opts?.description?.trim() ? opts.description.trim() : null;
   await db.runAsync(
-    'INSERT INTO playlists(id, name) VALUES (?, ?)',
-    [id, name],
+    'INSERT INTO playlists(id, name, artwork_uri, description) VALUES (?,?,?,?)',
+    [id, name, artworkUri, description],
   );
   return id;
 }

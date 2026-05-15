@@ -1,11 +1,9 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useLayoutEffect } from 'react';
 import {
   View,
   Text,
   Pressable,
   StyleSheet,
-  Alert,
-  TextInput,
 } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -13,8 +11,10 @@ import { useNavigation } from '@react-navigation/native';
 import { SearchBar } from '@/components/SearchBar';
 import { ListHeader } from '@/components/ListHeader';
 import { ArtworkImage } from '@/components/ArtworkImage';
+import { HeaderSettingsButton } from '@/components/HeaderSettingsButton';
+import { CreatePlaylistModal } from '@/components/CreatePlaylistModal';
+import { PlaylistActionSheet } from '@/components/PlaylistActionSheet';
 import { useLibraryStore } from '@/store/libraryStore';
-import { createPlaylist } from '@/db/library';
 import { Colors, Spacing, Typography, Radius } from '@/theme';
 import type { Playlist } from '@/db/library';
 import type { RootStackParamList } from '@/navigation/types';
@@ -24,10 +24,32 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 export function ListasScreen() {
   const [search, setSearch] = useState('');
+  const [createModalVisible, setCreateModalVisible] = useState(false);
+  const [menuPlaylist, setMenuPlaylist] = useState<Playlist | null>(null);
+  const [menuVisible, setMenuVisible] = useState(false);
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [editingPlaylist, setEditingPlaylist] = useState<Playlist | null>(null);
   const playlists = useLibraryStore((s) => s.playlists);
-  const refreshPlaylists = useLibraryStore((s) => s.refreshPlaylists);
   const navigation = useNavigation<Nav>();
   const insets = useSafeAreaInsets();
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <View style={styles.headerRight}>
+          <Pressable
+            onPress={() => setCreateModalVisible(true)}
+            hitSlop={12}
+            style={styles.headerPlus}
+            accessibilityLabel="Nueva lista"
+          >
+            <Text style={styles.headerPlusText}>+</Text>
+          </Pressable>
+          <HeaderSettingsButton />
+        </View>
+      ),
+    });
+  }, [navigation]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
@@ -35,20 +57,6 @@ export function ListasScreen() {
       ? playlists.filter((p) => p.name.toLowerCase().includes(q))
       : playlists;
   }, [playlists, search]);
-
-  const handleCreate = useCallback(() => {
-    Alert.prompt(
-      'Nueva lista',
-      'Nombre de la lista de reproducción',
-      async (name) => {
-        if (name?.trim()) {
-          await createPlaylist(name.trim());
-          await refreshPlaylists();
-        }
-      },
-      'plain-text',
-    );
-  }, [refreshPlaylists]);
 
   const handlePress = useCallback(
     (playlist: Playlist) => {
@@ -65,6 +73,11 @@ export function ListasScreen() {
       <Pressable
         style={({ pressed }) => [styles.item, pressed && styles.pressed]}
         onPress={() => handlePress(item)}
+        onLongPress={() => {
+          setMenuPlaylist(item);
+          setMenuVisible(true);
+        }}
+        delayLongPress={400}
       >
         <ArtworkImage uri={item.artworkUri} size={52} radius={Radius.sm} />
         <Text style={styles.name} numberOfLines={1}>
@@ -79,18 +92,41 @@ export function ListasScreen() {
   return (
     <View style={styles.container}>
       <SearchBar value={search} onChangeText={setSearch} />
-      <ListHeader
-        count={filtered.length}
-        label="listas"
-        sortLabel="+ Nueva"
-        onSortPress={handleCreate}
-      />
+      <ListHeader count={filtered.length} label="listas" />
       <FlashList
         data={filtered}
         renderItem={renderItem}
         estimatedItemSize={68}
         keyExtractor={(p) => p.id}
         contentContainerStyle={{ paddingBottom: insets.bottom + 8 }}
+      />
+      <CreatePlaylistModal
+        visible={createModalVisible}
+        onClose={() => setCreateModalVisible(false)}
+      />
+      <CreatePlaylistModal
+        visible={editModalVisible}
+        onClose={() => {
+          setEditModalVisible(false);
+          setEditingPlaylist(null);
+        }}
+        editingPlaylist={editingPlaylist}
+        onUpdated={() => {
+          setEditModalVisible(false);
+          setEditingPlaylist(null);
+        }}
+      />
+      <PlaylistActionSheet
+        visible={menuVisible}
+        playlist={menuPlaylist}
+        onClose={() => {
+          setMenuVisible(false);
+          setMenuPlaylist(null);
+        }}
+        onRequestEdit={(p) => {
+          setEditingPlaylist(p);
+          setEditModalVisible(true);
+        }}
       />
     </View>
   );
@@ -100,6 +136,20 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.bg,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerPlus: {
+    paddingHorizontal: 4,
+    paddingVertical: 4,
+  },
+  headerPlusText: {
+    fontSize: 28,
+    fontWeight: Typography.semibold,
+    color: Colors.accent,
+    lineHeight: 32,
   },
   item: {
     flexDirection: 'row',
