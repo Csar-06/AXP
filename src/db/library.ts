@@ -514,17 +514,28 @@ async function rebuildAggregates(): Promise<void> {
     GROUP BY album, COALESCE(NULLIF(album_artist,''), artist)
   `);
 
-  // Artists
-  await db.execAsync(`
-    INSERT INTO artists (id, name, album_count, track_count)
-    SELECT
-      lower(hex(randomblob(8))) as id,
-      artist as name,
-      COUNT(DISTINCT album) as album_count,
-      COUNT(*) as track_count
-    FROM tracks
-    GROUP BY artist
-  `);
+  // Artists — split multi-artist tags (e.g. "Yeat, Gunna") into individual rows
+  const allTrackRows = await db.getAllAsync<{ artist: string; album: string }>(
+    'SELECT artist, album FROM tracks',
+  );
+
+  const artistMap = new Map<string, { albums: Set<string>; trackCount: number }>();
+
+  for (const row of allTrackRows) {
+    for (const name of splitArtists(row.artist)) {
+      const entry = artistMap.get(name) ?? { albums: new Set<string>(), trackCount: 0 };
+      entry.albums.add(row.album);
+      entry.trackCount += 1;
+      artistMap.set(name, entry);
+    }
+  }
+
+  for (const [name, { albums, trackCount }] of artistMap) {
+    await db.runAsync(
+      `INSERT INTO artists (id, name, album_count, track_count) VALUES (lower(hex(randomblob(8))), ?, ?, ?)`,
+      [name, albums.size, trackCount],
+    );
+  }
 
   // Genres
   await db.execAsync(`
@@ -540,6 +551,17 @@ async function rebuildAggregates(): Promise<void> {
 }
 
 // ── Query helpers ──────────────────────────────────────────────────────────────
+
+/**
+ * Splits a raw artist string (e.g. "Yeat, Gunna" or "Yeat; Gunna") into
+ * individual artist names, trimming whitespace and discarding empty tokens.
+ */
+function splitArtists(artist: string): string[] {
+  return artist
+    .split(/[,;]/)
+    .map((a) => a.trim())
+    .filter((a) => a.length > 0);
+}
 
 function rowToTrack(r: Record<string, unknown>): Track {
   return {
@@ -643,11 +665,27 @@ export async function getArtists(search?: string): Promise<Artist[]> {
 
 export async function getArtistTracks(artistName: string): Promise<Track[]> {
   const db = await getDb();
+  // Fetch candidates via LIKE patterns to cover multi-artist strings, then
+  // filter precisely in JS with splitArtists to avoid false positives.
   const rows = await db.getAllAsync<Record<string, unknown>>(
-    'SELECT * FROM tracks WHERE artist = ? ORDER BY album, COALESCE(track_num,9999), title ASC',
-    [artistName],
+    `SELECT * FROM tracks
+     WHERE artist = ?
+        OR artist LIKE ?
+        OR artist LIKE ?
+        OR artist LIKE ?
+        OR artist LIKE ?
+     ORDER BY album, COALESCE(track_num,9999), title ASC`,
+    [
+      artistName,
+      `${artistName},%`,   // starts: "Yeat, Gunna"
+      `${artistName};%`,   // starts: "Yeat; Gunna"
+      `%, ${artistName}%`, // ends or middle: "Gunna, Yeat"
+      `%; ${artistName}%`, // ends or middle: "Gunna; Yeat"
+    ],
   );
-  return rows.map(rowToTrack);
+  return rows
+    .map(rowToTrack)
+    .filter((t) => splitArtists(t.artist).includes(artistName));
 }
 
 export async function getGenres(search?: string): Promise<Genre[]> {
