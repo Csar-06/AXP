@@ -9,6 +9,7 @@ import { ArtworkImage } from './ArtworkImage';
 import { Colors, Spacing, Typography } from '@/theme';
 import { formatDuration } from '@/utils/format';
 import type { Track } from '@/db/library';
+import { useLibraryStore } from '@/store/libraryStore';
 
 type Props = {
   track: Track;
@@ -27,20 +28,39 @@ export const TrackRow = React.memo(function TrackRow({
   isActive = false,
   rightElement,
 }: Props) {
+  const isFavorite = useLibraryStore((s) => !!s.favoriteTrackIds[track.id]);
+
   const handlePress = useCallback(() => onPress(track), [onPress, track]);
+
+  const favGlyph = isFavorite ? (
+    <Text style={styles.listFavoriteMark} accessibilityLabel="En favoritos">
+      ✦
+    </Text>
+  ) : null;
+
+  const starSlot = (
+    <View style={styles.favSlot}>{favGlyph}</View>
+  );
 
   return (
     <Pressable
       style={({ pressed }) => [styles.container, pressed && styles.pressed]}
       onPress={handlePress}
     >
-      {showTrackNum && (
-        <Text style={[styles.trackNum, isActive && styles.trackNumActive]}>
-          {track.trackNum ?? '–'}
-        </Text>
-      )}
-      {showArtwork && !showTrackNum && (
-        <ArtworkImage uri={track.artworkUri} size={44} style={styles.artwork} />
+      {showTrackNum ? (
+        <View style={styles.starAndTrackNum}>
+          {starSlot}
+          <Text style={[styles.trackNum, isActive && styles.trackNumActive]}>
+            {track.trackNum ?? '–'}
+          </Text>
+        </View>
+      ) : (
+        <>
+          {starSlot}
+          {showArtwork && (
+            <ArtworkImage uri={track.artworkUri} size={44} style={styles.artwork} />
+          )}
+        </>
       )}
       <View style={styles.info}>
         <Text
@@ -79,6 +99,24 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.6,
+  },
+  starAndTrackNum: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    flexShrink: 0,
+  },
+  favSlot: {
+    width: 12,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  listFavoriteMark: {
+    fontSize: 13,
+    lineHeight: 16,
+    color: Colors.accent,
+    fontWeight: Typography.bold,
   },
   artwork: {
     flexShrink: 0,
@@ -126,6 +164,7 @@ const styles = StyleSheet.create({
   },
   trackNum: {
     width: '8%',
+    minWidth: 28,
     fontSize: Typography.base,
     color: Colors.textSecondary,
     textAlign: 'right',

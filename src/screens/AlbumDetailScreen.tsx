@@ -12,6 +12,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { ArtworkImage } from '@/components/ArtworkImage';
 import { TrackRow } from '@/components/TrackRow';
 import { usePlayerStore } from '@/store/playerStore';
+import { useLibraryStore } from '@/store/libraryStore';
 import { getAlbumTracks } from '@/db/library';
 import type { Track } from '@/db/library';
 import { Colors, Spacing, Typography, Radius } from '@/theme';
@@ -41,6 +42,7 @@ const AlbumTrackRow = React.memo(function AlbumTrackRow({
   onPress,
 }: AlbumTrackRowProps) {
   const handlePress = useCallback(() => onPress(track), [onPress, track]);
+  const isFavorite = useLibraryStore((s) => !!s.favoriteTrackIds[track.id]);
 
   const subtitle = track.composer
     ? track.composer
@@ -51,9 +53,18 @@ const AlbumTrackRow = React.memo(function AlbumTrackRow({
       style={({ pressed }) => [styles.trackRow, pressed && styles.pressed]}
       onPress={handlePress}
     >
-      <Text style={[styles.trackNum, isActive && styles.trackNumActive]}>
-        {track.trackNum ?? '–'}
-      </Text>
+      <View style={styles.starAndTrackNum}>
+        <View style={styles.favSlot}>
+          {isFavorite ? (
+            <Text style={styles.listFavoriteMark} accessibilityLabel="En favoritos">
+              ✦
+            </Text>
+          ) : null}
+        </View>
+        <Text style={[styles.trackNum, isActive && styles.trackNumActive]}>
+          {track.trackNum ?? '–'}
+        </Text>
+      </View>
       <View style={styles.trackInfo}>
         <Text
           style={[styles.trackTitle, isActive && styles.trackTitleActive]}
@@ -379,8 +390,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: Spacing.base,
     paddingVertical: Spacing.sm,
-    gap: Spacing.md,
+    gap: Spacing.sm,
     minHeight: 52,
+  },
+  starAndTrackNum: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    flexShrink: 0,
+  },
+  favSlot: {
+    width: 12,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  listFavoriteMark: {
+    fontSize: 13,
+    lineHeight: 16,
+    color: Colors.accent,
+    fontWeight: Typography.bold,
   },
   pressed: {
     opacity: 0.6,

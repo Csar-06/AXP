@@ -745,6 +745,30 @@ export async function getPlaylistTracks(playlistId: string): Promise<Track[]> {
   return rows.map(rowToTrack);
 }
 
+/** Exact display name match (e.g. system playlist “Favoritos”). */
+export async function getPlaylistIdByExactName(
+  name: string,
+): Promise<string | null> {
+  const db = await getDb();
+  const row = await db.getFirstAsync<{ id: string }>(
+    'SELECT id FROM playlists WHERE name = ? LIMIT 1',
+    [name],
+  );
+  return row?.id ?? null;
+}
+
+/** Track IDs in the playlist whose name matches exactly `"Favoritos"`. */
+export async function getFavoriteTrackIds(): Promise<string[]> {
+  const db = await getDb();
+  const rows = await db.getAllAsync<{ track_id: string }>(
+    `SELECT pt.track_id FROM playlist_tracks pt
+     INNER JOIN playlists p ON p.id = pt.playlist_id
+     WHERE p.name = ?`,
+    ['Favoritos'],
+  );
+  return rows.map((r) => r.track_id);
+}
+
 export async function createPlaylist(name: string): Promise<string> {
   const db = await getDb();
   const id = `pl-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -753,6 +777,12 @@ export async function createPlaylist(name: string): Promise<string> {
     [id, name],
   );
   return id;
+}
+
+export async function ensureFavoritosPlaylist(): Promise<string> {
+  const existing = await getPlaylistIdByExactName('Favoritos');
+  if (existing) return existing;
+  return createPlaylist('Favoritos');
 }
 
 export async function addTrackToPlaylist(

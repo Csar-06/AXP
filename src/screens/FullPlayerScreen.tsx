@@ -17,6 +17,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { ArtworkImage } from '@/components/ArtworkImage';
 import { ProgressBar } from '@/components/ProgressBar';
 import { usePlayerStore } from '@/store/playerStore';
+import { useLibraryStore } from '@/store/libraryStore';
 import { useThemeStore } from '@/store/themeStore';
 import { RepeatMode } from '@/audio/TrackPlayerSetup';
 import { Colors, Spacing, Typography, Radius } from '@/theme';
@@ -43,11 +44,15 @@ export function FullPlayerScreen({ navigation }: Props) {
   const toggleShuffle = usePlayerStore((s) => s.toggleShuffle);
   const cycleRepeat = usePlayerStore((s) => s.cycleRepeat);
 
+  const isFavorite = useLibraryStore((s) => !!s.favoriteTrackIds[currentTrack?.id ?? '']);
+  const toggleFavorite = useLibraryStore((s) => s.toggleFavorite);
+
   const [lyricsVisible, setLyricsVisible] = useState(false);
 
   const lightAssetSource = '/home/ibune/Projects/AXP/AXP/assets/light/'
 
   const scale = useRef(new Animated.Value(isPlaying ? 1 : 0.786)).current;
+  const starScale = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     Animated.spring(scale, {
@@ -56,7 +61,62 @@ export function FullPlayerScreen({ navigation }: Props) {
       stiffness: 200,
       damping: 18,
     }).start();
-  }, [isPlaying])
+  }, [isPlaying, scale]);
+
+  useEffect(() => {
+    starScale.setValue(1);
+  }, [currentTrack?.id, starScale]);
+
+  const runLikeStarAnim = useCallback(() => {
+    Animated.sequence([
+      Animated.spring(starScale, {
+        toValue: 1.2,
+        useNativeDriver: true,
+        stiffness: 200,
+        damping: 18,
+      }),
+      Animated.spring(starScale, {
+        toValue: 1,
+        useNativeDriver: true,
+        stiffness: 200,
+        damping: 18,
+      }),
+    ]).start();
+  }, [starScale]);
+
+  const runUnlikeStarAnim = useCallback(() => {
+    Animated.sequence([
+      Animated.spring(starScale, {
+        toValue: 0.92,
+        useNativeDriver: true,
+        stiffness: 200,
+        damping: 20,
+      }),
+      Animated.spring(starScale, {
+        toValue: 1,
+        useNativeDriver: true,
+        stiffness: 200,
+        damping: 18,
+      }),
+    ]).start();
+  }, [starScale]);
+
+  const handleFavoritePress = useCallback(() => {
+    if (!currentTrack) return;
+    const willFavorite = !isFavorite;
+    if (willFavorite) {
+      runLikeStarAnim();
+    } else {
+      runUnlikeStarAnim();
+    }
+    toggleFavorite(currentTrack.id);
+  }, [
+    currentTrack,
+    isFavorite,
+    runLikeStarAnim,
+    runUnlikeStarAnim,
+    toggleFavorite,
+  ]);
 
   const repeatIcon =
     repeatMode === RepeatMode.Off
@@ -137,8 +197,16 @@ export function FullPlayerScreen({ navigation }: Props) {
               {currentTrack.artist}
             </Text>
           </View>
-          <Pressable hitSlop={10}>
-            <Text style={styles.starIcon}>☆</Text>
+          <Pressable onPress={handleFavoritePress} hitSlop={10}>
+            <Animated.View style={{ transform: [{ scale: starScale }] }}>
+              <Text
+                style={
+                  isFavorite ? styles.starIconLiked : styles.starIconUnliked
+                }
+              >
+                {isFavorite ? '✦' : '✧'}
+              </Text>
+            </Animated.View>
           </Pressable>
           <Pressable hitSlop={13}>
             <Text style={styles.headerMore}>···</Text>
@@ -323,9 +391,15 @@ const styles = StyleSheet.create({
     fontSize: Typography.sm,
     color: Colors.textTertiary,
   },
-  starIcon: {
+  starIconLiked: {
     fontSize: 24,
     color: Colors.textSecondary,
+    fontWeight: Typography.bold,
+  },
+  starIconUnliked: {
+    fontSize: 24,
+    color: Colors.textTertiary,
+    fontWeight: Typography.bold,
   },
   controls: {
     flexDirection: 'row',
