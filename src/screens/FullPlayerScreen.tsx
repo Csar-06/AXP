@@ -17,6 +17,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { ArtworkImage } from '@/components/ArtworkImage';
 import { CreatePlaylistModal } from '@/components/CreatePlaylistModal';
 import { LyricsView } from '@/components/LyricsView';
+import { MarqueeText } from '@/components/MarqueeText';
 import { ProgressBar } from '@/components/ProgressBar';
 import { usePlayerStore } from '@/store/playerStore';
 import { useLibraryStore } from '@/store/libraryStore';
@@ -359,16 +360,15 @@ export function FullPlayerScreen({ navigation }: Props) {
             <View style={styles.lyricsHeader}>
               <ArtworkImage
                 uri={currentTrack.artworkUri}
-                size={52}
-                radius={Radius.sm}
+                size={68}
+                radius={Radius.md}
               />
               <View style={styles.lyricsHeaderInfo}>
-                <Text style={styles.lyricsSong} numberOfLines={1}>
-                  {currentTrack.title}
-                </Text>
-                <Text style={styles.lyricsArtist} numberOfLines={1}>
-                  {currentTrack.artist}
-                </Text>
+                <MarqueeText text={currentTrack.title} style={styles.lyricsSong} />
+                <MarqueeText
+                  text={currentTrack.artist}
+                  style={styles.lyricsArtist}
+                />
               </View>
               <Pressable onPress={handleFavoritePress} hitSlop={10}>
                 <Text
@@ -622,25 +622,27 @@ const styles = StyleSheet.create({
   lyricsHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: Spacing.base,
-    paddingVertical: Spacing.lg,
-    gap: Spacing.md,
+    paddingHorizontal: Spacing.xl,
+    paddingTop: Spacing.xl,
+    paddingBottom: Spacing.lg,
+    marginBottom: Spacing.sm,
+    gap: Spacing.base,
   },
   lyricsHeaderInfo: {
     flex: 1,
-    gap: 2,
+    gap: 4,
   },
   lyricsSong: {
-    fontSize: Typography.base,
-    fontWeight: Typography.semibold,
+    fontSize: Typography.lg,
+    fontWeight: Typography.bold,
     color: Colors.textPrimary,
   },
   lyricsArtist: {
-    fontSize: Typography.sm,
+    fontSize: Typography.md,
     color: Colors.textSecondary,
   },
   lyricsClose: {
-    fontSize: 18,
+    fontSize: 20,
     color: Colors.textSecondary,
     padding: Spacing.xs,
   },
