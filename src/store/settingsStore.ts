@@ -10,9 +10,16 @@ const KEYS = {
   pauseOnAudioFocusLoss: 'pauseOnAudioFocusLoss',
   scanOnStartup: 'scanOnStartup',
   defaultSort: 'defaultSort',
+  lyricsSource: 'lyricsSource',
 } as const;
 
 export type DefaultSort = 'title' | 'artist' | 'album' | 'dateAdded';
+
+/**
+ * Where lyrics come from. `auto` uses both, preferring embedded metadata over
+ * a sidecar `.lrc` file.
+ */
+export type LyricsSource = 'metadata' | 'lrc' | 'auto';
 
 export type SettingsState = {
   dynamicTheming: boolean;
@@ -21,6 +28,7 @@ export type SettingsState = {
   pauseOnAudioFocusLoss: boolean;
   scanOnStartup: boolean;
   defaultSort: DefaultSort;
+  lyricsSource: LyricsSource;
 
   setDynamicTheming: (v: boolean) => void;
   setShowLosslessBadge: (v: boolean) => void;
@@ -28,6 +36,7 @@ export type SettingsState = {
   setPauseOnAudioFocusLoss: (v: boolean) => void;
   setScanOnStartup: (v: boolean) => void;
   setDefaultSort: (v: DefaultSort) => void;
+  setLyricsSource: (v: LyricsSource) => void;
 };
 
 function readBool(key: string, fallback: boolean): boolean {
@@ -47,6 +56,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   pauseOnAudioFocusLoss: readBool(KEYS.pauseOnAudioFocusLoss, true),
   scanOnStartup: readBool(KEYS.scanOnStartup, false),
   defaultSort: readString<DefaultSort>(KEYS.defaultSort, 'title'),
+  lyricsSource: readString<LyricsSource>(KEYS.lyricsSource, 'auto'),
 
   setDynamicTheming: (v) => {
     storage.set(KEYS.dynamicTheming, v);
@@ -71,5 +81,9 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setDefaultSort: (v) => {
     storage.set(KEYS.defaultSort, v);
     set({ defaultSort: v });
+  },
+  setLyricsSource: (v) => {
+    storage.set(KEYS.lyricsSource, v);
+    set({ lyricsSource: v });
   },
 }));

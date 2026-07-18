@@ -22,6 +22,7 @@ import { ProgressBar } from '@/components/ProgressBar';
 import { usePlayerStore } from '@/store/playerStore';
 import { useLibraryStore } from '@/store/libraryStore';
 import { useThemeStore } from '@/store/themeStore';
+import { useSettingsStore } from '@/store/settingsStore';
 import { RepeatMode } from '@/audio/TrackPlayerSetup';
 import { getLyricsForTrack } from '@/audio/lyrics';
 import { addTrackToPlaylist } from '@/db/library';
@@ -144,12 +145,13 @@ export function FullPlayerScreen({ navigation }: Props) {
     navigation.goBack();
   }, [navigation]);
 
-  // Lyrics (.lrc sidecar preferred, else embedded) are cached on the track at
-  // scan time, so this is a plain lookup — it enables the lyrics button and
-  // feeds the karaoke overlay.
+  // Lyrics are cached on the track at scan time, so this is a plain lookup — it
+  // enables the lyrics button and feeds the karaoke overlay. The source (metadata
+  // / .lrc / auto) is a user preference.
+  const lyricsSource = useSettingsStore((s) => s.lyricsSource);
   const lyricsRaw = useMemo(
-    () => (currentTrack ? getLyricsForTrack(currentTrack) : null),
-    [currentTrack],
+    () => (currentTrack ? getLyricsForTrack(currentTrack, lyricsSource) : null),
+    [currentTrack, lyricsSource],
   );
 
   const handleLyricsOpen = useCallback(() => setLyricsVisible(true), []);

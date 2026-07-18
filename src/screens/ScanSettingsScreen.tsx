@@ -16,7 +16,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as MediaLibrary from 'expo-media-library';
 import { useLibraryStore } from '@/store/libraryStore';
-import { useSettingsStore, type DefaultSort } from '@/store/settingsStore';
+import {
+  useSettingsStore,
+  type DefaultSort,
+  type LyricsSource,
+} from '@/store/settingsStore';
 import { addScanPath, removeScanPath } from '@/db/library';
 import { Colors, Spacing, Typography, Radius } from '@/theme';
 
@@ -37,6 +41,28 @@ const SORT_OPTIONS: { value: DefaultSort; label: string }[] = [
   { value: 'artist', label: 'Artista' },
   { value: 'album', label: 'Álbum' },
   { value: 'dateAdded', label: 'Fecha de adición' },
+];
+
+const LYRICS_SOURCE_OPTIONS: {
+  value: LyricsSource;
+  label: string;
+  description: string;
+}[] = [
+  {
+    value: 'auto',
+    label: 'Automático',
+    description: 'Metadatos y archivos .lrc (prioriza metadatos).',
+  },
+  {
+    value: 'metadata',
+    label: 'Metadatos',
+    description: 'Solo letras incrustadas en la pista.',
+  },
+  {
+    value: 'lrc',
+    label: 'Archivos .lrc',
+    description: 'Solo archivos .lrc junto a la pista.',
+  },
 ];
 
 function pathLabel(p: string): string {
@@ -69,6 +95,7 @@ export function ScanSettingsScreen() {
   const [pickerVisible, setPickerVisible] = useState(false);
   const [pathInput, setPathInput] = useState('');
   const [sortPickerVisible, setSortPickerVisible] = useState(false);
+  const [lyricsPickerVisible, setLyricsPickerVisible] = useState(false);
 
   const openPathPicker = useCallback(() => {
     setPathInput('');
@@ -141,6 +168,9 @@ export function ScanSettingsScreen() {
   }, [scan, scanPaths]);
 
   const sortLabel = SORT_OPTIONS.find((o) => o.value === settings.defaultSort)?.label;
+  const lyricsSourceLabel = LYRICS_SOURCE_OPTIONS.find(
+    (o) => o.value === settings.lyricsSource,
+  )?.label;
 
   return (
     <>
@@ -227,6 +257,22 @@ export function ScanSettingsScreen() {
             value={settings.pauseOnAudioFocusLoss}
             onChange={settings.setPauseOnAudioFocusLoss}
           />
+        </Section>
+
+        <Section title="Letras">
+          <Pressable
+            style={styles.row}
+            onPress={() => setLyricsPickerVisible(true)}
+          >
+            <View style={styles.rowMain}>
+              <Text style={styles.rowLabel}>Fuente de letras</Text>
+              <Text style={styles.rowDesc}>
+                De dónde se obtienen las letras de las canciones.
+              </Text>
+            </View>
+            <Text style={styles.rowValue}>{lyricsSourceLabel}</Text>
+            <Text style={styles.chevron}>›</Text>
+          </Pressable>
         </Section>
 
         <Section title="Apariencia">
@@ -393,6 +439,49 @@ export function ScanSettingsScreen() {
                   >
                     {opt.label}
                   </Text>
+                  {selected && <Text style={styles.checkMark}>✓</Text>}
+                </Pressable>
+              );
+            })}
+          </View>
+        </Pressable>
+      </Modal>
+
+      {/* Lyrics source picker modal */}
+      <Modal
+        visible={lyricsPickerVisible}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setLyricsPickerVisible(false)}
+      >
+        <Pressable
+          style={styles.modalBackdrop}
+          onPress={() => setLyricsPickerVisible(false)}
+        >
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Fuente de letras</Text>
+            {LYRICS_SOURCE_OPTIONS.map((opt) => {
+              const selected = settings.lyricsSource === opt.value;
+              return (
+                <Pressable
+                  key={opt.value}
+                  style={[styles.row, selected && styles.rowSelected]}
+                  onPress={() => {
+                    settings.setLyricsSource(opt.value);
+                    setLyricsPickerVisible(false);
+                  }}
+                >
+                  <View style={styles.rowMain}>
+                    <Text
+                      style={[
+                        styles.rowLabel,
+                        selected && { color: Colors.accent },
+                      ]}
+                    >
+                      {opt.label}
+                    </Text>
+                    <Text style={styles.rowDesc}>{opt.description}</Text>
+                  </View>
                   {selected && <Text style={styles.checkMark}>✓</Text>}
                 </Pressable>
               );

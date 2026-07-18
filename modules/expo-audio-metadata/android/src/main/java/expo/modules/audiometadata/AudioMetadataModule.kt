@@ -36,16 +36,23 @@ class AudioMetadataModule : Module() {
         ?: throw IllegalStateException("React context is not available")
 
       val retriever = MediaMetadataRetriever()
-      try {
+      val result = try {
         retriever.setDataSource(context, Uri.parse(uri))
         buildResult(retriever)
       } finally {
         retriever.release()
       }
+
+      // MediaMetadataRetriever exposes no lyrics field — parse the tags directly.
+      if (!result.containsKey("lyrics")) {
+        LyricsExtractor.extract(context, uri)?.let { result["lyrics"] = it }
+      }
+
+      result
     }
   }
 
-  private fun buildResult(r: MediaMetadataRetriever): Map<String, Any> {
+  private fun buildResult(r: MediaMetadataRetriever): MutableMap<String, Any> {
     val map = mutableMapOf<String, Any>()
 
     // Text tags

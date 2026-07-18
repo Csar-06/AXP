@@ -347,36 +347,12 @@ function parseSlashNum(raw: string | undefined, idx: 0 | 1): number | null {
 }
 
 /**
- * Read metadata via jsmediatags — used only to extract USLT lyrics on
- * non-SAF paths on Android, where the native module doesn't expose them.
- */
-async function readLyricsJsmediatags(uri: string): Promise<string | null> {
-  return new Promise((resolve) => {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const jsmediatags = require('jsmediatags');
-      jsmediatags.read(uri, {
-        onSuccess(tag: { tags: Record<string, unknown> }) {
-          const uslt = tag.tags.USLT as { text?: string } | undefined;
-          resolve(uslt?.text ?? null);
-        },
-        onError() {
-          resolve(null);
-        },
-      });
-    } catch {
-      resolve(null);
-    }
-  });
-}
-
-/**
  * Primary metadata reader: uses the native expo-audio-metadata module which
- * calls MediaMetadataRetriever on Android and AVFoundation on iOS.
+ * calls MediaMetadataRetriever on Android and AVFoundation on iOS. Embedded
+ * lyrics (USLT / ©lyr / Vorbis LYRICS) are extracted natively on both
+ * platforms — see the module's LyricsExtractor on Android.
  *
- * - Supports both POSIX file paths and SAF (content://) URIs on Android.
- * - For lyrics on Android (not exposed by MediaMetadataRetriever), falls back
- *   to jsmediatags on non-SAF files.
+ * Supports both POSIX file paths and SAF (content://) URIs on Android.
  */
 async function readMetadata(uri: string): Promise<RawMeta> {
   try {
@@ -409,12 +385,9 @@ async function readMetadata(uri: string): Promise<RawMeta> {
       picture:     native.artworkBase64 ?? null,
     };
 
-    // iOS exposes lyrics natively; on Android they are absent from the native
-    // module — fall back to jsmediatags for non-SAF paths only.
+    // Embedded lyrics come from the native module on both platforms.
     if (native.lyrics) {
       base.lyrics = native.lyrics;
-    } else if (!isSafUri(uri)) {
-      base.lyrics = await readLyricsJsmediatags(uri);
     }
 
     return base;
@@ -481,9 +454,10 @@ export async function scanLibrary(
 
     const existing = await db.getFirstAsync<{
       date_modified: number;
+      lyrics: string | null;
       synced_lyrics: string | null;
     }>(
-      'SELECT date_modified, synced_lyrics FROM tracks WHERE uri = ?',
+      'SELECT date_modified, lyrics, synced_lyrics FROM tracks WHERE uri = ?',
       [uri],
     );
 
@@ -499,6 +473,16 @@ export async function scanLibrary(
           'UPDATE tracks SET synced_lyrics = ? WHERE uri = ?',
           [desiredLrc, uri],
         );
+      }
+      // One-time backfill of embedded lyrics for tracks indexed before lyrics
+      // support existed. NULL = never checked; '' = checked, none found — so
+      // this native re-read happens at most once per track.
+      if (existing.lyrics == null) {
+        const meta = await readMetadata(uri);
+        await db.runAsync('UPDATE tracks SET lyrics = ? WHERE uri = ?', [
+          meta.lyrics ?? '',
+          uri,
+        ]);
       }
       skipped++;
       continue;
@@ -542,7 +526,7 @@ export async function scanLibrary(
       [
         id, uri, title, artist, album, albumArtist, genre, year,
         trackNum, discNum, meta.totalTracks ?? null, meta.totalDiscs ?? null,
-        meta.composer ?? null, meta.lyrics ?? null, syncedLyrics,
+        meta.composer ?? null, meta.lyrics ?? '', syncedLyrics,
         meta.duration ?? 0, size, ext,
         meta.bitrate ?? null, meta.sampleRate ?? null, meta.channels ?? null,
         lossless,
