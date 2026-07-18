@@ -6,7 +6,6 @@ import {
   Pressable,
   StyleSheet,
   StatusBar,
-  ScrollView,
   Modal,
   Animated,
   FlatList,
@@ -17,11 +16,13 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { ArtworkImage } from '@/components/ArtworkImage';
 import { CreatePlaylistModal } from '@/components/CreatePlaylistModal';
+import { LyricsView } from '@/components/LyricsView';
 import { ProgressBar } from '@/components/ProgressBar';
 import { usePlayerStore } from '@/store/playerStore';
 import { useLibraryStore } from '@/store/libraryStore';
 import { useThemeStore } from '@/store/themeStore';
 import { RepeatMode } from '@/audio/TrackPlayerSetup';
+import { getLyricsForTrack } from '@/audio/lyrics';
 import { addTrackToPlaylist } from '@/db/library';
 import { Colors, Spacing, Typography, Radius } from '@/theme';
 import type { RootStackParamList } from '@/navigation/types';
@@ -142,6 +143,14 @@ export function FullPlayerScreen({ navigation }: Props) {
     navigation.goBack();
   }, [navigation]);
 
+  // Lyrics (.lrc sidecar preferred, else embedded) are cached on the track at
+  // scan time, so this is a plain lookup — it enables the lyrics button and
+  // feeds the karaoke overlay.
+  const lyricsRaw = useMemo(
+    () => (currentTrack ? getLyricsForTrack(currentTrack) : null),
+    [currentTrack],
+  );
+
   const handleLyricsOpen = useCallback(() => setLyricsVisible(true), []);
   const handleLyricsClose = useCallback(() => setLyricsVisible(false), []);
 
@@ -212,7 +221,7 @@ export function FullPlayerScreen({ navigation }: Props) {
 
   if (!currentTrack) return null;
 
-  const hasLyrics = Boolean(currentTrack.lyrics?.trim());
+  const hasLyrics = Boolean(lyricsRaw?.trim());
 
   return (
     <GestureDetector gesture={dismissGesture}>
@@ -348,6 +357,11 @@ export function FullPlayerScreen({ navigation }: Props) {
             style={[styles.lyricsModal, { paddingTop: insets.top }]}
           >
             <View style={styles.lyricsHeader}>
+              <ArtworkImage
+                uri={currentTrack.artworkUri}
+                size={52}
+                radius={Radius.sm}
+              />
               <View style={styles.lyricsHeaderInfo}>
                 <Text style={styles.lyricsSong} numberOfLines={1}>
                   {currentTrack.title}
@@ -356,20 +370,27 @@ export function FullPlayerScreen({ navigation }: Props) {
                   {currentTrack.artist}
                 </Text>
               </View>
+              <Pressable onPress={handleFavoritePress} hitSlop={10}>
+                <Text
+                  style={
+                    isFavorite ? styles.starIconLiked : styles.starIconUnliked
+                  }
+                >
+                  {isFavorite ? '✦' : '✧'}
+                </Text>
+              </Pressable>
               <Pressable onPress={handleLyricsClose} hitSlop={12}>
                 <Text style={styles.lyricsClose}>✕</Text>
               </Pressable>
             </View>
-            <ScrollView
-              style={styles.lyricsScroll}
-              contentContainerStyle={[
-                styles.lyricsContent,
-                { paddingBottom: insets.bottom + Spacing.xxxl },
-              ]}
-              showsVerticalScrollIndicator={false}
-            >
-              <Text style={styles.lyricsText}>{currentTrack.lyrics}</Text>
-            </ScrollView>
+            {lyricsRaw ? (
+              <LyricsView
+                raw={lyricsRaw}
+                position={position}
+                onSeekTo={seek}
+                bottomInset={insets.bottom}
+              />
+            ) : null}
           </LinearGradient>
         </Modal>
 
@@ -623,19 +644,6 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     padding: Spacing.xs,
   },
-  lyricsScroll: {
-    flex: 1,
-  },
-  lyricsContent: {
-    paddingHorizontal: Spacing.base,
-    paddingTop: Spacing.md,
-  },
-  lyricsText: {
-    fontSize: Typography.base,
-    lineHeight: 28,
-    color: Colors.textPrimary,
-  },
-
   trackMenuRoot: {
     flex: 1,
     justifyContent: 'flex-end',

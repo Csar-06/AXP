@@ -17,6 +17,8 @@ export type Track = {
   totalDiscs: number | null;
   composer: string | null;
   lyrics: string | null;
+  /** Cached contents of a sidecar `.lrc` file, if one was found during scan. */
+  syncedLyrics: string | null;
   duration: number;
   fileSize: number;
   format: string;
@@ -76,6 +78,10 @@ const losslessFormats = ['.flac', '.alac', '.wav', '.aiff', '.aif', '.ape'];
 function isLossless(name: string): boolean {
   const lower = name.toLowerCase();
   return losslessFormats.some((ext) => lower.endsWith(ext));
+}
+
+function isLrcFile(name: string): boolean {
+  return name.toLowerCase().endsWith('.lrc');
 }
 
 function slugify(text: string): string {
@@ -241,27 +247,30 @@ function hasFileExtension(name: string): boolean {
   return dot > 0 && dot < name.length - 1 && dot >= name.length - 6;
 }
 
-async function collectAudioFilesPosix(dir: string): Promise<string[]> {
-  const results: string[] = [];
+// Both audio files and their sibling `.lrc` files are gathered in a single
+// directory walk, so lyrics discovery adds no extra traversal cost.
+type CollectedFiles = { audio: string[]; lrc: string[] };
+
+async function collectFilesPosix(dir: string, out: CollectedFiles): Promise<void> {
   try {
     const entries = await FileSystem.readDirectoryAsync(dir);
     for (const entry of entries) {
       const fullPath = `${dir}/${entry}`;
       const info = await FileSystem.getInfoAsync(fullPath);
       if (info.isDirectory) {
-        results.push(...(await collectAudioFilesPosix(fullPath)));
+        await collectFilesPosix(fullPath, out);
       } else if (isAudioFile(entry)) {
-        results.push(fullPath);
+        out.audio.push(fullPath);
+      } else if (isLrcFile(entry)) {
+        out.lrc.push(fullPath);
       }
     }
   } catch {
     // Directory not accessible — skip silently
   }
-  return results;
 }
 
-async function collectAudioFilesSaf(dirUri: string): Promise<string[]> {
-  const results: string[] = [];
+async function collectFilesSaf(dirUri: string, out: CollectedFiles): Promise<void> {
   try {
     const children = await FileSystem.StorageAccessFramework.readDirectoryAsync(
       dirUri,
@@ -271,21 +280,43 @@ async function collectAudioFilesSaf(dirUri: string): Promise<string[]> {
       if (!hasFileExtension(name)) {
         // Treat as subdirectory — SAF child URIs for folders look identical
         // to file URIs, so we use the "no extension" heuristic and recurse.
-        results.push(...(await collectAudioFilesSaf(childUri)));
+        await collectFilesSaf(childUri, out);
       } else if (isAudioFile(name)) {
-        results.push(childUri);
+        out.audio.push(childUri);
+      } else if (isLrcFile(name)) {
+        out.lrc.push(childUri);
       }
     }
   } catch {
     // Permission revoked or invalid URI — skip silently
   }
-  return results;
 }
 
-async function collectAudioFiles(dir: string): Promise<string[]> {
+async function collectFiles(dir: string, out: CollectedFiles): Promise<void> {
   return isSafUri(dir)
-    ? collectAudioFilesSaf(dir)
-    : collectAudioFilesPosix(dir);
+    ? collectFilesSaf(dir, out)
+    : collectFilesPosix(dir, out);
+}
+
+/**
+ * Candidate sidecar `.lrc` URI for an audio file (same path, `.lrc` extension).
+ * The trailing extension is unencoded even in SAF document ids, so a plain
+ * suffix swap yields a URI that matches the one gathered by the walk. Returns
+ * null when there is no such file among the discovered `.lrc` set.
+ */
+function siblingLrcUri(audioUri: string, lrcSet: Set<string>): string | null {
+  const candidate = audioUri.replace(/\.[^./]+$/, '.lrc');
+  if (candidate === audioUri) return null;
+  return lrcSet.has(candidate) ? candidate : null;
+}
+
+async function readLrcContent(uri: string): Promise<string | null> {
+  try {
+    const text = await FileSystem.readAsStringAsync(uri);
+    return text?.trim() ? text : null;
+  } catch {
+    return null;
+  }
 }
 
 type RawMeta = {
@@ -423,11 +454,12 @@ export async function scanLibrary(
   const paths = await getScanPaths();
   if (paths.length === 0) return { added: 0, skipped: 0, removed: 0 };
 
-  const allFiles: string[] = [];
+  const collected: CollectedFiles = { audio: [], lrc: [] };
   for (const p of paths) {
-    const files = await collectAudioFiles(p);
-    allFiles.push(...files);
+    await collectFiles(p, collected);
   }
+  const allFiles = collected.audio;
+  const lrcSet = new Set(collected.lrc);
 
   let added = 0;
   let skipped = 0;
@@ -447,12 +479,27 @@ export async function scanLibrary(
       // index the track. The next scan will re-process if the URI is unchanged.
     }
 
-    const existing = await db.getFirstAsync<{ date_modified: number }>(
-      'SELECT date_modified FROM tracks WHERE uri = ?',
+    const existing = await db.getFirstAsync<{
+      date_modified: number;
+      synced_lyrics: string | null;
+    }>(
+      'SELECT date_modified, synced_lyrics FROM tracks WHERE uri = ?',
       [uri],
     );
 
+    const lrcUri = siblingLrcUri(uri, lrcSet);
+
     if (existing && mtime > 0 && existing.date_modified >= Math.floor(mtime)) {
+      // Audio metadata is unchanged, but a `.lrc` may have been added, edited,
+      // or removed since the last scan. Reconcile the cached copy cheaply
+      // without re-reading the audio file's tags.
+      const desiredLrc = lrcUri ? await readLrcContent(lrcUri) : null;
+      if (desiredLrc !== (existing.synced_lyrics ?? null)) {
+        await db.runAsync(
+          'UPDATE tracks SET synced_lyrics = ? WHERE uri = ?',
+          [desiredLrc, uri],
+        );
+      }
       skipped++;
       continue;
     }
@@ -471,20 +518,22 @@ export async function scanLibrary(
     const lossless = isLossless(filename) ? 1 : 0;
     const id = makeId(uri);
     const artworkUri = await persistArtwork(id, meta.picture);
+    const syncedLyrics = lrcUri ? await readLrcContent(lrcUri) : null;
 
     await db.runAsync(
       `INSERT INTO tracks (
         id, uri, title, artist, album, album_artist, genre, year,
-        track_num, disc_num, total_tracks, total_discs, composer, lyrics,
+        track_num, disc_num, total_tracks, total_discs, composer, lyrics, synced_lyrics,
         duration, file_size, format, bitrate, sample_rate, channels, is_lossless,
         artwork_uri, date_added, date_modified
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,strftime('%s','now'),?)
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,strftime('%s','now'),?)
       ON CONFLICT(uri) DO UPDATE SET
         title=excluded.title, artist=excluded.artist, album=excluded.album,
         album_artist=excluded.album_artist, genre=excluded.genre, year=excluded.year,
         track_num=excluded.track_num, disc_num=excluded.disc_num,
         total_tracks=excluded.total_tracks, total_discs=excluded.total_discs,
         composer=excluded.composer, lyrics=excluded.lyrics,
+        synced_lyrics=excluded.synced_lyrics,
         duration=excluded.duration, file_size=excluded.file_size,
         format=excluded.format, bitrate=excluded.bitrate,
         sample_rate=excluded.sample_rate, channels=excluded.channels,
@@ -493,7 +542,7 @@ export async function scanLibrary(
       [
         id, uri, title, artist, album, albumArtist, genre, year,
         trackNum, discNum, meta.totalTracks ?? null, meta.totalDiscs ?? null,
-        meta.composer ?? null, meta.lyrics ?? null,
+        meta.composer ?? null, meta.lyrics ?? null, syncedLyrics,
         meta.duration ?? 0, size, ext,
         meta.bitrate ?? null, meta.sampleRate ?? null, meta.channels ?? null,
         lossless,
@@ -618,6 +667,7 @@ function rowToTrack(r: Record<string, unknown>): Track {
     totalDiscs: r.total_discs as number | null,
     composer: r.composer as string | null,
     lyrics: r.lyrics as string | null,
+    syncedLyrics: r.synced_lyrics as string | null,
     duration: r.duration as number,
     fileSize: r.file_size as number,
     format: r.format as string,

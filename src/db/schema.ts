@@ -11,10 +11,12 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
 
 async function runMigrations(database: SQLite.SQLiteDatabase): Promise<void> {
   const newColumns: Array<{ col: string; def: string }> = [
-    { col: 'composer',     def: 'ALTER TABLE tracks ADD COLUMN composer     TEXT' },
-    { col: 'lyrics',       def: 'ALTER TABLE tracks ADD COLUMN lyrics       TEXT' },
-    { col: 'total_tracks', def: 'ALTER TABLE tracks ADD COLUMN total_tracks INTEGER' },
-    { col: 'total_discs',  def: 'ALTER TABLE tracks ADD COLUMN total_discs  INTEGER' },
+    { col: 'composer',      def: 'ALTER TABLE tracks ADD COLUMN composer      TEXT' },
+    { col: 'lyrics',        def: 'ALTER TABLE tracks ADD COLUMN lyrics        TEXT' },
+    { col: 'total_tracks',  def: 'ALTER TABLE tracks ADD COLUMN total_tracks  INTEGER' },
+    { col: 'total_discs',   def: 'ALTER TABLE tracks ADD COLUMN total_discs   INTEGER' },
+    // Cached contents of a sidecar `.lrc` file, discovered during scan.
+    { col: 'synced_lyrics', def: 'ALTER TABLE tracks ADD COLUMN synced_lyrics TEXT' },
   ];
 
   const cols = await database.getAllAsync<{ name: string }>(
